@@ -1,0 +1,93 @@
+{
+  "_meta": {
+    "source_checked": "2026-11-14",
+    "sources": [
+      "https://hdhdining.ucsd.edu/_files/fall-dining-hours-2026.pdf",
+      "https://hdhdining.ucsd.edu/about-us/projects.html",
+      "https://hdh-web.ucsd.edu/dining/apps/diningservices/Restaurants",
+      "https://tritontaste.com/menus"
+    ],
+    "notes": [
+      "Station lists change by day and quarter. Treat this as seed data and keep it editable in the DB.",
+      "Fields marked verify:true were not confirmed from an official HDH page. Check them on the HDH Menus & Hours app before launch.",
+      "HDH does not publish which venues take Triton2Go orders. triton2go is assumed true for residential dining halls. Verify."
+    ]
+  },
+  "halls": [
+    {
+      "id": "64-degrees",
+      "name": "64 Degrees",
+      "college": "Revelle",
+      "triton2go": true,
+      "hours": {"sun": "9am-9pm", "mon": "7am-11pm", "tue": "7am-11pm", "wed": "7am-11pm", "thu": "7am-11pm", "fri": "7am-9pm", "sat": "9am-9pm"},
+      "restaurants": ["Garden Bar", "Taqueria", "Triton Grill", "Wok This Way"]
+    },
+    {
+      "id": "pines",
+      "name": "Pines",
+      "college": "Muir",
+      "triton2go": true,
+      "note": "Reopened Fall 2026 after renovation. Slice Pizzeria is below Pines and is a late-night spot.",
+      "hours": {"sun": "9am-11pm", "mon": "7am-11pm", "tue": "7am-11pm", "wed": "7am-11pm", "thu": "7am-11pm", "fri": "7am-9pm", "sat": "9am-9pm"},
+      "restaurants": ["Char", "Heat", "Current", "Breeze", "Street Eats", "Pacific Coast Hwy", "Morning Fog", "Slice at Pines"]
+    },
+    {
+      "id": "canyon-vista",
+      "name": "Canyon Vista",
+      "college": "Warren",
+      "college_verify": true,
+      "triton2go": true,
+      "hours": {"sun": "9am-9pm", "mon": "7am-9pm", "tue": "7am-9pm", "wed": "7am-9pm", "thu": "7am-9pm", "fri": "7am-9pm", "sat": "9am-9pm"},
+      "restaurants": ["360", "Fresh", "Fusion Grill"]
+    },
+    {
+      "id": "ventanas",
+      "name": "Ventanas",
+      "college": "Eighth",
+      "college_verify": true,
+      "triton2go": true,
+      "hours": {"sun": "9am-9pm", "mon": "8am-9pm", "tue": "8am-9pm", "wed": "8am-9pm", "thu": "8am-9pm", "fri": "8am-9pm", "sat": "9am-9pm"},
+      "restaurants": ["Soul", "Tandoor", "Vibe", "Journey", "HaPi", "Kaldi"]
+    },
+    {
+      "id": "oceanview",
+      "name": "OceanView",
+      "college": "Marshall",
+      "college_verify": true,
+      "triton2go": true,
+      "hours": {"sun": "closed", "mon": "8am-9pm", "tue": "8am-9pm", "wed": "8am-9pm", "thu": "8am-9pm", "fri": "8am-3pm", "sat": "closed"},
+      "restaurants": ["Journey Bowls", "Tandoor", "Vibe", "Soul", "Burgers", "Build Your Own"],
+      "restaurants_verify": true
+    },
+    {
+      "id": "sixth",
+      "name": "Restaurants at Sixth",
+      "college": "Sixth",
+      "triton2go": true,
+      "hours": {"sun": "closed", "mon": "8am-9pm", "tue": "8am-9pm", "wed": "8am-9pm", "thu": "8am-9pm", "fri": "8am-9pm", "sat": "closed"},
+      "restaurants": [],
+      "restaurants_verify": true
+    },
+    {
+      "id": "foodworx",
+      "name": "Foodworx",
+      "college": null,
+      "triton2go": true,
+      "hours": {"sun": "closed", "mon": "9am-8pm", "tue": "9am-8pm", "wed": "9am-8pm", "thu": "9am-8pm", "fri": "9am-8pm", "sat": "closed"},
+      "restaurants": [],
+      "restaurants_verify": true
+    }
+  ],
+  "destinations": [
+    {"id": "geisel", "name": "Geisel Library", "spots_hint": "Floor + table number from QR sticker"},
+    {"id": "price-center", "name": "Price Center"},
+    {"id": "biomed-library", "name": "Biomedical Library", "verify": true},
+    {"id": "cse-building", "name": "CSE Building", "verify": true},
+    {"id": "revelle-res", "name": "Revelle residence lobbies"},
+    {"id": "muir-res", "name": "Muir residence lobbies"},
+    {"id": "warren-res", "name": "Warren residence lobbies"},
+    {"id": "marshall-res", "name": "Marshall residence lobbies"},
+    {"id": "sixth-res", "name": "Sixth residence lobbies"},
+    {"id": "eighth-res", "name": "Eighth residence lobbies"}
+  ]
+}

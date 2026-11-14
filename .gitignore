@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+web-build/
+.expo/
+
+# macOS
+.DS_Store
+
+# local env
+.env
+.env.local
+.env*.local
+
+# editor
+.vscode/
+.idea/
+
+# logs
+*.log
+npm-debug.*
