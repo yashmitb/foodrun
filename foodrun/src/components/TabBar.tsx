@@ -169,7 +169,12 @@ export function TabBar({ active, onChange }: Props) {
 function Bar({ children }: { children: React.ReactNode }) {
   if (LIQUID) {
     return (
-      <GlassView glassEffectStyle="regular" isInteractive style={styles.clip}>
+      <GlassView
+        glassEffectStyle="regular"
+        colorScheme="light"
+        isInteractive
+        style={styles.clip}
+      >
         {children}
       </GlassView>
     );

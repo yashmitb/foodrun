@@ -1,4 +1,3 @@
-import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
@@ -6,15 +5,6 @@ import Animated from 'react-native-reanimated';
 
 import { usePressAnimation } from '@/lib/motion';
 import { glass, radius as r } from '@/theme';
-
-/**
- * iOS 26 exposes Apple's real Liquid Glass through `UIVisualEffectView`, and
- * expo-glass-effect ships inside Expo Go, so no dev build is needed. It is not
- * a nicer blur: it refracts what is behind it and lights its own edges, which
- * is the part a hand-rolled stack can never fake. Checked once at module load
- * because the answer cannot change while the app is running.
- */
-const LIQUID = isLiquidGlassAvailable() && isGlassEffectAPIAvailable();
 
 type Props = {
   children: React.ReactNode;
@@ -28,13 +18,20 @@ type Props = {
 };
 
 /**
- * §3.3 — Glass surface.
+ * §3.3 — Glass surface: translucent fill, specular sheen, top hairline.
  *
- * The fallback path (iOS 25 and below, Android, web) deliberately has no
- * `BlurView`. A blur only earns its cost when there is detail behind it to
- * smear; behind these cards is a smooth gradient, so a translucent fill plus
- * a specular sheen is visually indistinguishable and free. One blur per card
- * was the main reason scrolling dropped frames.
+ * Deliberately not a `BlurView`, and deliberately not iOS 26's Liquid Glass
+ * either.
+ *
+ * No blur: a blur only earns its cost when there is detail behind it to
+ * smear, and behind these cards is a smooth gradient. One blur per card was
+ * the main reason scrolling dropped frames.
+ *
+ * No GlassView: Apple's own guidance is that Liquid Glass is for floating
+ * chrome over content — a tab bar, a toolbar — not for the content itself,
+ * and on a device it rendered as a heavy grey slab under this app's navy
+ * text. This is also what reference/screens/ actually shows. The tab bar,
+ * which is floating chrome, does use the real thing.
  */
 export function GlassCard({
   children,
@@ -46,11 +43,7 @@ export function GlassCard({
 }: Props) {
   const press = usePressAnimation({ scaleTo: 0.985, dimTo: 0.97, haptic: 'light' });
 
-  const surface = LIQUID ? (
-    <GlassView glassEffectStyle="regular" style={[styles.clip, { borderRadius: radius }]}>
-      <View style={{ padding }}>{children}</View>
-    </GlassView>
-  ) : (
+  const surface = (
     <View style={[styles.clip, { borderRadius: radius, backgroundColor: glass.fill }]}>
       {/* specular sheen: light falls off by ~55% of the height */}
       <LinearGradient

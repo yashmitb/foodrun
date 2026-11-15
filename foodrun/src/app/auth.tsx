@@ -32,7 +32,9 @@ export default function Auth() {
 
   const sendCode = () => {
     if (!emailOk) {
-      setError('Use your @ucsd.edu email.');
+      // Return on an empty field is not a mistake worth naming; the button
+      // already says what is needed.
+      setError(email.trim() ? 'Use your @ucsd.edu email.' : null);
       return;
     }
     setError(null);
