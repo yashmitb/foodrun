@@ -1,51 +1,70 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useId } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
-import { backgroundGradient, blobs } from '@/theme';
+import { backgroundGradient, blobGradient, blobs } from '@/theme';
 
 /**
  * §3.2 — Vertical gradient + three large soft blobs.
  *
- * This used to be solid circles under a full-bleed `BlurView`. That is one
- * `UIVisualEffectView` covering the whole screen on every route, and iOS
- * re-renders a visual effect view's blur from the live content beneath it —
+ * The blobs used to be solid circles under a full-bleed `BlurView`. That is
+ * one `UIVisualEffectView` covering the whole screen on every route, and iOS
+ * re-renders a visual effect view's blur from the live content beneath it on
  * every frame, whether or not anything moved. Stacked under the per-card and
- * tab-bar blurs it was costing six to ten offscreen GPU passes per frame, and
- * no spring can look smooth at 35fps.
+ * tab-bar blurs it cost six to ten offscreen GPU passes per frame, and no
+ * spring looks smooth at 35fps.
  *
- * SVG radial gradients give the same soft falloff for free: they rasterise
- * once and never again, because nothing behind them changes. The blur was
- * buying nothing anyway — there is no detail back there to blur, only a
- * gradient.
+ * SVG radial gradients give the same falloff for free — they rasterise once,
+ * because nothing behind them ever changes. The blur was buying nothing
+ * anyway: there was no detail back there to blur, only a gradient.
+ *
+ * The page gradient stays a real `LinearGradient` filling the whole frame.
+ * Drawing it as an SVG ellipse left the corners uncovered, which read as the
+ * colour having disappeared.
  */
 export function AppBackground({ children }: { children?: React.ReactNode }) {
+  const { width, height } = useWindowDimensions();
+  /**
+   * Tab screens stay mounted, so several of these exist at once. On web they
+   * share one DOM, and duplicate SVG gradient ids would make every blob
+   * resolve to whichever was defined first.
+   */
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  // The drawn circle is the blur's full extent, not the original radius.
+  const rings = blobs.map((b) => ({ b, ...blobGradient(b.r, b.blur) }));
+
   return (
     <View style={styles.root}>
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+      <LinearGradient
+        colors={backgroundGradient.colors}
+        locations={backgroundGradient.locations}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Sized in pixels, not percentages: a circle's percentage radius
+          resolves against the viewport diagonal, which is not what we want. */}
+      <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
         <Defs>
-          <RadialGradient id="page" cx="50%" cy="0%" r="110%">
-            <Stop offset="0" stopColor={backgroundGradient.colors[0]} />
-            <Stop offset="0.45" stopColor={backgroundGradient.colors[1]} />
-            <Stop offset="1" stopColor={backgroundGradient.colors[2]} />
-          </RadialGradient>
-          {blobs.map((b, i) => (
-            <RadialGradient key={i} id={`blob${i}`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor={b.core} stopOpacity={b.opacity} />
-              <Stop offset="0.55" stopColor={b.core} stopOpacity={b.opacity * 0.45} />
-              <Stop offset="1" stopColor={b.core} stopOpacity={0} />
+          {rings.map(({ b, stops }, i) => (
+            <RadialGradient key={i} id={`blob-${uid}-${i}`} cx="50%" cy="50%" r="50%">
+              {stops.map((st) => (
+                <Stop
+                  key={st.offset}
+                  offset={st.offset}
+                  stopColor={b.core}
+                  stopOpacity={b.opacity * st.mul}
+                />
+              ))}
             </RadialGradient>
           ))}
         </Defs>
-        <Ellipse cx="50%" cy="50%" rx="75%" ry="75%" fill="url(#page)" />
-        {blobs.map((b, i) => (
-          <Ellipse
+        {rings.map(({ b, outer }, i) => (
+          <Circle
             key={i}
-            cx={b.cx}
-            cy={b.cy}
-            rx={b.size / 2}
-            ry={b.size / 2}
-            fill={`url(#blob${i})`}
+            cx={b.x * width}
+            cy={b.y * height}
+            r={outer}
+            fill={`url(#blob-${uid}-${i})`}
           />
         ))}
       </Svg>

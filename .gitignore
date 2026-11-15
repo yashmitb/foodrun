@@ -21,3 +21,4 @@ web-build/
 # logs
 *.log
 npm-debug.*
+.gstack/

@@ -41,16 +41,63 @@ export const backgroundGradient = {
  * Soft blobs behind the glass (§3.2). Drawn as SVG radial gradients, so the
  * falloff is baked into the fill instead of coming from a live blur pass —
  * see AppBackground for why that matters.
+ *
+ * `x`/`y` are fractions of the screen, matching where the original blurred
+ * circles sat; `r` is their old 150pt radius plus the ~60pt the blur spread.
+ */
+/**
+ * Soft blobs behind the glass (§3.2). The prototype drew solid circles and let
+ * CSS `filter: blur(60px)` soften them; here they are SVG radial gradients, so
+ * nothing has to be blurred at runtime — see AppBackground for why that matters.
+ *
+ * `x`/`y` are fractions of the screen, matching where the prototype's circles
+ * sat on its 390x844 column. `r` is the circle's radius and `blur` its CSS
+ * blur, both in points, so the gradient below can reproduce the exact falloff.
  */
 export const blobs = [
-  { core: '#12355B', opacity: 0.26, size: 420, cx: '8%', cy: '4%' },
-  { core: '#F28C28', opacity: 0.3, size: 380, cx: '104%', cy: '42%' },
-  { core: '#12355B', opacity: 0.16, size: 360, cx: '-4%', cy: '88%' },
+  { core: '#12355B', opacity: 0.26, r: 150, blur: 60, x: 0.154, y: 0.083 },
+  { core: '#F28C28', opacity: 0.3, r: 130, blur: 60, x: 0.949, y: 0.509 },
+  { core: '#12355B', opacity: 0.16, r: 120, blur: 60, x: 0.103, y: 0.81 },
 ] as const;
+
+/** Abramowitz & Stegun 7.1.26. Max error 1.5e-7, which is far below 8-bit. */
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1;
+  const z = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * z);
+  const y =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-z * z);
+  return sign * y;
+}
+
+/**
+ * The gradient stops for one blob.
+ *
+ * A Gaussian blur of a solid disc is not a linear fade from the centre: the
+ * core stays at full strength and the edge spreads symmetrically about the
+ * original radius. At distance d the value is Φ((R − d) / σ). Guessing at
+ * stops instead left a visible ring where the falloff changed slope, so this
+ * evaluates the real thing.
+ */
+export function blobGradient(r: number, blur: number) {
+  const outer = r + 2.5 * blur;
+  const steps = 12;
+  const stops = Array.from({ length: steps + 1 }, (_, i) => {
+    const d = (i / steps) * outer;
+    const phi = 0.5 * (1 + erf((r - d) / (blur * Math.SQRT2)));
+    return { offset: (i / steps).toFixed(4), mul: Math.max(0, Math.min(1, phi)) };
+  });
+  // The last stop must land on zero or the circle ends on a hard edge.
+  stops[steps] = { offset: '1.0000', mul: 0 };
+  return { outer, stops };
+}
 
 /** Glass surface (§3.3). */
 export const glass = {
-  fill: 'rgba(255,255,255,0.62)',
+  fill: 'rgba(255,255,255,0.58)',
   blurIntensity: 50, // expo-blur intensity ~40–60, tint "light"
   border: 'rgba(255,255,255,0.78)',
   shadow: {
