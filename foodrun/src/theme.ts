@@ -161,9 +161,11 @@ export const layout = {
   /**
    * The tab bar floats over the scene, so every tab screen has to end this
    * far above its own bottom edge or the last card sits underneath it.
-   * Icon-only bar height (~62) + the gap it keeps from the bottom + air.
+   * Icon-only bar height (~62) + the gap it keeps from the bottom + a little
+   * air. Exact rather than generous: every point over is dead space a finger
+   * can scroll into and nothing comes back.
    */
-  tabBarClearance: 92,
+  tabBarClearance: 86,
 } as const;
 
 /** Motion (§3.6). Respect Reduce Motion (cross-fade only). */

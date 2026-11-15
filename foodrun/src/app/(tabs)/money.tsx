@@ -23,7 +23,12 @@ export default function Money() {
   return (
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+          /* Don't rubber-band a screen whose content already fits. */
+          alwaysBounceVertical={false}
+        >
           <Text style={[type.largeTitle as object, { fontFamily: fonts.bold, marginTop: 6 }]}>
             Money
           </Text>

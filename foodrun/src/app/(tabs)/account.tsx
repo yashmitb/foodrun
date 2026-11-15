@@ -17,6 +17,7 @@ import { AppBackground } from '@/components/AppBackground';
 import { Avatar } from '@/components/Avatar';
 import { GlassCard } from '@/components/GlassCard';
 import { useToast } from '@/components/Toast';
+import * as auth from '@/data/auth';
 import { useStore } from '@/data/store';
 import { colors, fonts, layout, type } from '@/theme';
 
@@ -69,7 +70,12 @@ export default function Account() {
   return (
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+          /* Don't rubber-band a screen whose content already fits. */
+          alwaysBounceVertical={false}
+        >
           <Text style={[type.largeTitle as object, { fontFamily: fonts.bold, marginTop: 6 }]}>
             Account
           </Text>
@@ -112,6 +118,9 @@ export default function Account() {
 
           <Pressable
             onPress={() => {
+              // End the Supabase session too, where there is one. The local
+              // store clearing is what wipes the saved session on disk.
+              void auth.signOut();
               signOut();
               router.replace('/auth');
             }}

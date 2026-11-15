@@ -16,6 +16,7 @@ import { AppBackground } from '@/components/AppBackground';
 import { SecondaryButton } from '@/components/buttons';
 import { GlassCard } from '@/components/GlassCard';
 import { RunCard } from '@/components/RunCard';
+import { SegmentedControl, type Segment } from '@/components/SegmentedControl';
 import { useToast } from '@/components/Toast';
 import { DESTINATIONS, HALLS, destinationById, hallById, isOpenNow } from '@/data/dining';
 import { isActiveOrder, useStore } from '@/data/store';
@@ -27,6 +28,11 @@ import { colors, fonts, layout, radius, type } from '@/theme';
  * real search (heuristic 8 fix), full hall names scrolling horizontally (§4),
  * Now / Scheduled toggle (P6).
  */
+const WHEN_SEGMENTS: readonly Segment<'now' | 'scheduled'>[] = [
+  { value: 'now', label: 'Now', a11y: 'Runs leaving now' },
+  { value: 'scheduled', label: 'Scheduled', a11y: 'Scheduled runs' },
+];
+
 export default function Find() {
   const toast = useToast();
   const me = useStore((s) => s.me);
@@ -77,7 +83,12 @@ export default function Find() {
   return (
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+          /* Don't rubber-band a screen whose content already fits. */
+          alwaysBounceVertical={false}
+        >
           <Text style={[type.eyebrow as object, { fontFamily: fonts.semiBold, marginTop: 6 }]}>
             TO {destShort.toUpperCase()}
           </Text>
@@ -117,9 +128,8 @@ export default function Find() {
           ) : null}
 
           {/* Search — real (heuristic 8) */}
-          <GlassCard radius={14} padding={0} style={{ marginTop: 14 }}>
+          <GlassCard radius={18} padding={0} style={{ marginTop: 14 }}>
             <View style={styles.searchRow}>
-              <Search size={18} color={colors.faint} strokeWidth={1.9} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
@@ -128,6 +138,9 @@ export default function Find() {
                 style={styles.searchInput}
                 returnKeyType="search"
               />
+              {/* Trailing, not leading: the field is wide and the glyph reads
+                  as an affordance at the end of it rather than as a label. */}
+              <Search size={20} color={colors.faint} strokeWidth={1.9} />
             </View>
           </GlassCard>
 
@@ -156,28 +169,14 @@ export default function Find() {
             ))}
           </ScrollView>
 
-          {/* Now / Scheduled (P6) */}
-          <GlassCard radius={radius.segmented} padding={0} style={{ marginTop: 12 }}>
-            <View style={styles.seg}>
-              {(['now', 'scheduled'] as const).map((w) => (
-                <Pressable
-                  key={w}
-                  onPress={() => {
-                    if (when !== w) haptic('select');
-                    setWhen(w);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: when === w }}
-                  accessibilityLabel={w === 'now' ? 'Runs leaving now' : 'Scheduled runs'}
-                  style={[styles.segBtn, when === w && styles.segBtnOn]}
-                >
-                  <Text style={[styles.segText, when === w && styles.segTextOn]}>
-                    {w === 'now' ? 'Now' : 'Scheduled'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </GlassCard>
+          {/* Now / Scheduled (P6) — drag or tap */}
+          <View style={{ marginTop: 12 }}>
+            <SegmentedControl
+              segments={WHEN_SEGMENTS}
+              value={when}
+              onChange={setWhen}
+            />
+          </View>
 
           {hasActiveOrder ? (
             <Animated.View entering={FadeIn.duration(260)} style={{ marginTop: 14 }}>
@@ -252,41 +251,44 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: layout.tabBarClearance,
   },
-  destChip: { paddingVertical: 8, paddingHorizontal: 14 },
-  destChipText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.navy },
+  destChip: { paddingVertical: 10, paddingHorizontal: 16 },
+  destChipText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.navy },
   destList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   destOption: {
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
     borderRadius: 999,
     backgroundColor: 'rgba(18,53,91,0.08)',
   },
   destOptionOn: { backgroundColor: colors.navy },
-  destOptionText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.navy },
+  destOptionText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.navy },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
+    gap: 10,
+    paddingHorizontal: 16,
     paddingVertical: 2,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: fonts.regular,
     color: colors.ink,
-    paddingVertical: 12,
+    paddingVertical: 15,
   },
   hallChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    // 44pt tall including the text: Apple's minimum comfortable touch target,
+    // and these sit in a horizontal scroller where a near miss scrolls
+    // instead of selecting.
+    paddingVertical: 11,
+    paddingHorizontal: 18,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.55)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.78)',
   },
   hallChipOn: { backgroundColor: colors.navy, borderColor: colors.navy },
-  hallChipText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.navy },
+  hallChipText: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.navy },
   hallChipTextOn: { color: colors.white },
   seg: { flexDirection: 'row', padding: 3 },
   segBtn: { flex: 1, paddingVertical: 7, borderRadius: 9, alignItems: 'center' },

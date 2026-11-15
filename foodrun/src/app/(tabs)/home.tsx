@@ -69,7 +69,12 @@ export default function Home() {
   return (
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+          /* Don't rubber-band a screen whose content already fits. */
+          alwaysBounceVertical={false}
+        >
           {/* Block 1: greeting */}
           <Animated.View entering={enterUp(stagger(0))} style={styles.top}>
             <View>

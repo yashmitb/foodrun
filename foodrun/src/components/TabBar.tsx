@@ -227,7 +227,12 @@ export function TabBar({ active, onChange }: Props) {
 
   return (
     <View
-      style={[styles.wrap, { bottom: Math.max(insets.bottom, layout.tabBarBottom) }]}
+      /*
+       * Sit low. The home indicator's inset is generous for a bar that is
+       * already a floating pill, so most of it is given back; the floor keeps
+       * it off the very edge on a device with no inset at all.
+       */
+      style={[styles.wrap, { bottom: Math.max(insets.bottom - 16, 8) }]}
       accessibilityRole="tablist"
     >
       <Bar>
@@ -333,15 +338,21 @@ const styles = StyleSheet.create({
   inner: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    /*
+     * No horizontal padding: with it, the first and last tabs started inset
+     * from the bar's edge, so the capsule stopped short at either end and
+     * looked mis-centred. Now the row spans the bar and the capsule can reach
+     * both ends. Vertical padding stays, to keep the capsule off the rim.
+     */
     paddingVertical: 6,
-    paddingHorizontal: 6,
+    paddingHorizontal: 0,
   },
   capsule: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     left: 0,
-    borderRadius: 22,
+    borderRadius: 26,
     backgroundColor: 'rgba(18,53,91,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.5)',

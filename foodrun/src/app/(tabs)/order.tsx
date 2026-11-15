@@ -84,7 +84,12 @@ export default function MyOrder() {
   return (
     <AppBackground>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.wrap}
+          showsVerticalScrollIndicator={false}
+          /* Don't rubber-band a screen whose content already fits. */
+          alwaysBounceVertical={false}
+        >
           <Text style={styles.screenTitle}>My Order</Text>
 
           {/* Hero */}
