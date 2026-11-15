@@ -1,9 +1,16 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { MapPin, MessageSquare, Star } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  LinearTransition,
+  SlideInDown,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { AppBackground } from '@/components/AppBackground';
 import { Avatar } from '@/components/Avatar';
 import { PrimaryButton } from '@/components/buttons';
@@ -15,6 +22,8 @@ import { hallById } from '@/data/dining';
 import { useStore } from '@/data/store';
 import type { ReportReason } from '@/data/types';
 import { clockTime, countdown, updatedLabel } from '@/lib/format';
+import { haptic, stagger } from '@/lib/motion';
+import { useNow } from '@/lib/useAppClock';
 import { colors, fonts, layout, radius, type } from '@/theme';
 
 const STAGE_INDEX: Record<string, number> = {
@@ -38,24 +47,14 @@ export default function MyOrder() {
   const toast = useToast();
   const order = useStore((s) => s.myOrder);
   const runs = useStore((s) => s.runs);
-  const tick = useStore((s) => s.tick);
   const cancelMyOrder = useStore((s) => s.cancelMyOrder);
   const rateRunner = useStore((s) => s.rateRunner);
   const reportProblem = useStore((s) => s.reportProblem);
-  const [, force] = useState(0);
   const [reporting, setReporting] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [stars, setStars] = useState(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      const t = setInterval(() => {
-        tick();
-        force((x) => x + 1);
-      }, 1000);
-      return () => clearInterval(t);
-    }, [tick]),
-  );
+  // Ticking happens at the root; this just re-renders the countdown labels.
+  const now = useNow();
 
   if (!order) {
     return (
@@ -80,7 +79,7 @@ export default function MyOrder() {
   const run = runs.find((r) => r.id === order.runId);
   const runner = run?.runner;
   const hall = hallById(order.hallId);
-  const cd = order.status === 'pending' ? countdown(order.cancelUntil) : null;
+  const cd = order.status === 'pending' ? countdown(order.cancelUntil, now) : null;
   const stage = STAGE_INDEX[order.status] ?? 0;
   const delivered = order.status === 'delivered';
   const canFreeCancel = order.status === 'pending';
@@ -93,7 +92,7 @@ export default function MyOrder() {
           <Text style={styles.screenTitle}>My Order</Text>
 
           {/* Hero */}
-          <View style={styles.hero}>
+          <Animated.View entering={FadeIn.duration(340)} style={styles.hero}>
             <Text style={[type.eyebrow as object, { fontFamily: fonts.semiBold }]}>
               {delivered
                 ? 'Delivered'
@@ -109,39 +108,52 @@ export default function MyOrder() {
               <Text style={styles.here}>Enjoy!</Text>
             ) : order.status === 'pending' && cd ? (
               <>
-                <Text style={styles.cancelCountdown}>{cd}</Text>
+                <AnimatedNumber
+                  value={cd}
+                  style={styles.cancelCountdown}
+                  label={`Free cancel for ${cd}`}
+                />
                 <Text style={styles.cancelHint}>
                   Cancel free · {runner?.firstName} won&apos;t grab it yet
                 </Text>
               </>
             ) : (
-              <Text style={styles.heroNum}>
-                {order.etaMinutes ?? '–'}
+              <View style={styles.heroRow}>
+                <AnimatedNumber
+                  value={order.etaMinutes ?? '–'}
+                  style={styles.heroNum}
+                  label={`Arriving in ${order.etaMinutes ?? 'a few'} minutes`}
+                />
                 <Text style={styles.heroUnit}> min</Text>
-              </Text>
+              </View>
             )}
             <Text style={styles.heroSub}>
               {order.restaurant} · {hall?.name}
             </Text>
             {!delivered && order.status !== 'pending' && order.etaUpdatedAt ? (
-              <Text style={styles.updated}>{updatedLabel(order.etaUpdatedAt)}</Text>
+              <Text style={styles.updated}>{updatedLabel(order.etaUpdatedAt, now)}</Text>
             ) : null}
-          </View>
+          </Animated.View>
 
-          <View style={{ marginTop: 22 }}>
+          <Animated.View entering={FadeInDown.duration(380).delay(80)} style={{ marginTop: 22 }}>
             <ProgressSteps current={stage} />
-          </View>
+          </Animated.View>
 
           {/* Timeline (P2) */}
           {order.events.length > 0 ? (
-            <View style={styles.timeline}>
-              {order.events.map((e) => (
-                <View key={e.id} style={styles.timelineRow}>
+            <Animated.View style={styles.timeline} layout={LinearTransition}>
+              {order.events.map((e, i) => (
+                <Animated.View
+                  key={e.id}
+                  entering={FadeInDown.duration(320).delay(stagger(i, 35, 160))}
+                  layout={LinearTransition}
+                  style={styles.timelineRow}
+                >
                   <Text style={styles.timelineTime}>{clockTime(e.at)}</Text>
                   <Text style={styles.timelineLabel}>{e.label}</Text>
-                </View>
+                </Animated.View>
               ))}
-            </View>
+            </Animated.View>
           ) : null}
 
           {/* Runner + drop spot */}
@@ -182,7 +194,14 @@ export default function MyOrder() {
               </Text>
               <View style={styles.starsRow}>
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <Pressable key={n} onPress={() => setStars(n)} accessibilityLabel={`${n} stars`}>
+                  <Pressable
+                    key={n}
+                    onPress={() => {
+                      haptic('light');
+                      setStars(n);
+                    }}
+                    accessibilityLabel={`${n} stars`}
+                  >
                     <Star
                       size={34}
                       color={colors.orange}
@@ -200,6 +219,7 @@ export default function MyOrder() {
                 label={stars > 0 ? `Submit ${stars}★` : 'Tap a star'}
                 disabled={stars === 0}
                 onPress={() => {
+                  haptic('success');
                   rateRunner(stars);
                   toast.show({ message: `Thanks! ${runner?.firstName} got your rating.` });
                 }}
@@ -225,6 +245,7 @@ export default function MyOrder() {
             <Pressable
               onPress={() => {
                 if (canFreeCancel) {
+                  haptic('warning');
                   cancelMyOrder();
                   toast.show({ message: 'Order removed. No charge.' });
                 } else {
@@ -251,7 +272,7 @@ export default function MyOrder() {
         {reporting ? (
           <View style={StyleSheet.absoluteFill}>
             <Pressable style={styles.scrim} onPress={() => setReporting(false)} />
-            <View style={styles.actions}>
+            <Animated.View entering={SlideInDown.duration(280)} style={styles.actions}>
               <View style={styles.actionGroup}>
                 <Text style={styles.actionHeader}>What went wrong?</Text>
                 {REPORT_REASONS.map((r) => (
@@ -273,7 +294,7 @@ export default function MyOrder() {
                   <Text style={[styles.actionText, { fontFamily: fonts.semiBold }]}>Cancel</Text>
                 </Pressable>
               </View>
-            </View>
+            </Animated.View>
           </View>
         ) : null}
 
@@ -281,7 +302,7 @@ export default function MyOrder() {
         {confirmCancel ? (
           <View style={StyleSheet.absoluteFill}>
             <Pressable style={styles.scrim} onPress={() => setConfirmCancel(false)} />
-            <View style={styles.actions}>
+            <Animated.View entering={SlideInDown.duration(280)} style={styles.actions}>
               <View style={styles.actionGroup}>
                 <Text style={styles.actionHeader}>
                   {runner?.firstName} already planned around your order. Cancel anyway?
@@ -302,7 +323,7 @@ export default function MyOrder() {
                   <Text style={[styles.actionText, { fontFamily: fonts.semiBold }]}>Keep it</Text>
                 </Pressable>
               </View>
-            </View>
+            </Animated.View>
           </View>
         ) : null}
       </SafeAreaView>
@@ -328,6 +349,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   hero: { alignItems: 'center', marginTop: 22 },
+  heroRow: { flexDirection: 'row', alignItems: 'baseline' },
   heroNum: {
     fontSize: 96,
     fontFamily: fonts.bold,

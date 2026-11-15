@@ -1,45 +1,63 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
+  FadeIn,
+  FadeInDown,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
 import { destinationById } from '@/data/dining';
 import { useJoinDraft } from '@/data/joinDraft';
 import { useStore } from '@/data/store';
+import { SPRING_BOUNCY, haptic } from '@/lib/motion';
 import { colors, fonts, motion } from '@/theme';
 
+/** How long to look before offering a way out. */
+const NO_STICKER_AFTER_MS = 7000;
+
 /**
- * §6.3 Step 3 — table QR scanner. Real camera when permitted (works in Expo
- * Go); a demo sticker resolves after 4s so the flow never dead-ends. A real
- * table QR encodes the spot label ("Geisel 2F, Table 14").
+ * §6.3 Step 3 — table QR scanner.
+ *
+ * A real table QR encodes the spot label ("Geisel 2F, Table 14"). If nothing
+ * is found we surface choices instead of inventing a spot: silently filling in
+ * a plausible table sends someone's food to the wrong place, and the check
+ * mark makes them believe it was really scanned.
  */
 export default function Scan() {
   const { runId } = useLocalSearchParams<{ runId: string }>();
-  const draft = useJoinDraft();
   const run = useStore((s) => s.runs.find((r) => r.id === runId));
   const dest = run ? destinationById(run.destinationId) : null;
 
   const [permission, requestPermission] = useCameraPermissions();
+  const [noSticker, setNoSticker] = useState(false);
   const sweep = useSharedValue(0);
+  const found = useSharedValue(0);
   const done = useRef(false);
-
-  const finish = (spot: string) => {
-    if (done.current) return;
-    done.current = true;
-    draft.patch({ dropSpot: spot });
-    router.back();
-  };
 
   const demoSpot = dest?.name.includes('Geisel')
     ? 'Geisel 2F, Table 14'
     : `${dest?.name ?? 'Drop spot'}, Table 3`;
+
+  const patch = useJoinDraft((d) => d.patch);
+  const finish = useCallback(
+    (spot: string) => {
+      if (done.current) return;
+      done.current = true;
+      haptic('success');
+      found.set(withSpring(1, SPRING_BOUNCY));
+      patch({ dropSpot: spot });
+      // let the frame turn green before the sheet comes back
+      setTimeout(() => router.back(), 260);
+    },
+    [found, patch],
+  );
 
   useEffect(() => {
     if (Platform.OS !== 'web' && permission && !permission.granted && permission.canAskAgain) {
@@ -55,14 +73,20 @@ export default function Scan() {
         true,
       ),
     );
-    // Demo fallback: resolve even with no sticker in frame.
-    const t = setTimeout(() => finish(demoSpot), 4000);
+    const t = setTimeout(() => {
+      if (!done.current) setNoSticker(true);
+    }, NO_STICKER_AFTER_MS);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sweep]);
 
   const lineStyle = useAnimatedStyle(() => ({
     top: `${8 + sweep.get() * 82}%`,
+    opacity: 1 - found.get(),
+  }));
+
+  const frameStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + found.get() * 0.04 }],
+    borderColor: found.get() > 0.5 ? colors.success : 'rgba(255,255,255,0.85)',
   }));
 
   const cameraOk = Platform.OS !== 'web' && permission?.granted;
@@ -70,7 +94,8 @@ export default function Scan() {
   return (
     <View style={styles.root}>
       <Text style={styles.title}>Point at the table sticker</Text>
-      <View style={styles.viewfinder}>
+
+      <Animated.View style={[styles.viewfinder, frameStyle]}>
         {cameraOk ? (
           <CameraView
             style={styles.camera}
@@ -78,7 +103,8 @@ export default function Scan() {
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={({ data }) => {
               const text = (data ?? '').trim();
-              finish(text.length > 0 && text.length <= 60 ? text : demoSpot);
+              // Only trust a sticker that looks like a spot label.
+              if (text.length > 0 && text.length <= 60) finish(text);
             }}
           />
         ) : (
@@ -93,8 +119,40 @@ export default function Scan() {
           </View>
         )}
         <Animated.View style={[styles.scanLine, lineStyle]} />
-      </View>
-      <Text style={styles.scanning}>Scanning…</Text>
+      </Animated.View>
+
+      {noSticker ? (
+        <Animated.View entering={FadeInDown.duration(280)} style={styles.fallback}>
+          <Text style={styles.fallbackTitle}>No sticker found</Text>
+          <Text style={styles.fallbackBody}>
+            Keep the camera on it, or set your spot by hand so your runner knows where to go.
+          </Text>
+          <Pressable
+            onPress={() => {
+              done.current = true;
+              router.back();
+            }}
+            style={styles.fallbackPrimary}
+            accessibilityRole="button"
+          >
+            <Text style={styles.fallbackPrimaryText}>Pick a spot instead</Text>
+          </Pressable>
+          {!cameraOk ? (
+            <Pressable
+              onPress={() => finish(`${demoSpot} (demo)`)}
+              style={styles.fallbackGhost}
+              accessibilityRole="button"
+            >
+              <Text style={styles.fallbackGhostText}>Use a demo spot</Text>
+            </Pressable>
+          ) : null}
+        </Animated.View>
+      ) : (
+        <Animated.Text entering={FadeIn} style={styles.scanning}>
+          Scanning…
+        </Animated.Text>
+      )}
+
       <Pressable
         onPress={() => {
           done.current = true;
@@ -116,6 +174,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 22,
+    paddingHorizontal: 28,
   },
   title: { color: colors.white, fontSize: 17, fontFamily: fonts.semiBold },
   viewfinder: {
@@ -123,7 +182,6 @@ const styles = StyleSheet.create({
     height: 240,
     borderRadius: 30,
     borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.85)',
     overflow: 'hidden',
     backgroundColor: '#1B2836',
     alignItems: 'center',
@@ -152,6 +210,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   scanning: { color: '#B7C3D1', fontSize: 14, fontFamily: fonts.regular },
+  fallback: { alignItems: 'center', gap: 10 },
+  fallbackTitle: { color: colors.white, fontSize: 16, fontFamily: fonts.semiBold },
+  fallbackBody: {
+    color: '#B7C3D1',
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  fallbackPrimary: {
+    marginTop: 4,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: 999,
+    backgroundColor: colors.orange,
+  },
+  fallbackPrimaryText: { color: colors.navy, fontSize: 15, fontFamily: fonts.bold },
+  fallbackGhost: { paddingVertical: 8, paddingHorizontal: 16 },
+  fallbackGhostText: { color: '#B7C3D1', fontSize: 13, fontFamily: fonts.semiBold },
   cancel: {
     paddingVertical: 8,
     paddingHorizontal: 18,

@@ -114,6 +114,16 @@ export type JoinDraft = {
 
 type RunnerOrder = Order & { ordererName: string };
 
+/** Why a join was refused, so the sheet can say something useful. */
+export type JoinResult =
+  | { ok: true; order: Order }
+  | { ok: false; reason: 'full' | 'has_order' | 'not_found' };
+
+/** An order still in flight — blocks joining a second run. */
+export function isActiveOrder(o: Order | null): o is Order {
+  return !!o && o.status !== 'delivered' && o.status !== 'cancelled';
+}
+
 type State = {
   // session
   signedIn: boolean;
@@ -141,9 +151,11 @@ type State = {
   setDestination: (id: string) => void;
   setDropSpot: (spot: string) => void;
 
-  joinRun: (draft: Required<JoinDraft>) => Order | null;
+  joinRun: (draft: Required<JoinDraft>) => JoinResult;
   cancelMyOrder: () => void;
   tick: () => void;
+  /** Advances runner-side orders: pending → confirmed when the window ends. */
+  tickRun: () => void;
   rateRunner: (stars: number) => void;
   reportProblem: (reason: ReportReason) => void;
 
@@ -220,7 +232,11 @@ export const useStore = create<State>((set, get) => ({
   joinRun: (draft) => {
     const s = get();
     const run = s.runs.find((r) => r.id === draft.runId);
-    if (!run || run.spotsLeft <= 0 || !s.me) return null;
+    if (!run || !s.me) return { ok: false, reason: 'not_found' };
+    if (run.spotsLeft <= 0) return { ok: false, reason: 'full' };
+    // One order at a time. A finished-but-unrated order is archived instead.
+    if (isActiveOrder(s.myOrder)) return { ok: false, reason: 'has_order' };
+    const archived = s.myOrder ? [s.myOrder, ...s.pastOrders] : s.pastOrders;
     const cancelUntil = new Date(
       Math.min(Date.now() + FREE_CANCEL_MS, new Date(run.leaveAt).getTime()),
     ).toISOString();
@@ -244,10 +260,11 @@ export const useStore = create<State>((set, get) => ({
     order = pushEvent(order, 'pending', `You joined ${run.runner.firstName}'s run`);
     set({
       myOrder: order,
+      pastOrders: archived,
       dropSpot: draft.dropSpot,
       runs: s.runs.map((r) => (r.id === run.id ? { ...r, spotsLeft: r.spotsLeft - 1 } : r)),
     });
-    return order;
+    return { ok: true, order };
   },
 
   cancelMyOrder: () => {
@@ -320,6 +337,27 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  /**
+   * Runner-side clock. Mirrors the orderer's cancel window (§6.4): once it
+   * ends the order becomes `confirmed` and the runner is told to grab it.
+   */
+  tickRun: () => {
+    const s = get();
+    if (s.myRunOrders.length === 0) return;
+    const now = Date.now();
+    let changed = false;
+    const next = s.myRunOrders.map((o) => {
+      if (o.status !== 'pending' || now < new Date(o.cancelUntil).getTime()) return o;
+      changed = true;
+      return pushEvent(
+        { ...o, status: 'confirmed' },
+        'confirmed',
+        `${o.ordererName} confirmed — grab this one`,
+      ) as RunnerOrder;
+    });
+    if (changed) set({ myRunOrders: next });
+  },
+
   rateRunner: (stars) => {
     const s = get();
     if (!s.myOrder) return;
@@ -373,12 +411,14 @@ export const useStore = create<State>((set, get) => ({
       o = pushEvent(o, o.status, `${joiner.firstName} joined your run`);
       return { ...o, ordererName: joiner.firstName };
     });
+    // Seeded orders already occupy spots — keep the posted run from overbooking.
+    const posted: Run = { ...run, spotsLeft: Math.max(0, p.spots - orders.length) };
     set({
-      myRun: run,
+      myRun: posted,
       myRunOrders: orders,
-      runs: [run, ...s.runs],
+      runs: [posted, ...s.runs],
     });
-    return run;
+    return posted;
   },
 
   runnerMarkPickedUp: (orderId) =>

@@ -1,9 +1,11 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { ArrowRight, MapPin, Plus } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { AppBackground } from '@/components/AppBackground';
 import { Avatar } from '@/components/Avatar';
 import { PrimaryButton, SecondaryButton } from '@/components/buttons';
@@ -12,6 +14,8 @@ import { RunCard } from '@/components/RunCard';
 import { destinationById, hallById } from '@/data/dining';
 import { useStore } from '@/data/store';
 import { dayName, greeting } from '@/lib/format';
+import { stagger } from '@/lib/motion';
+import { useNow } from '@/lib/useAppClock';
 import { colors, fonts, layout, radius, type } from '@/theme';
 
 const STATUS_LINE: Record<string, (n: string) => string> = {
@@ -32,19 +36,8 @@ export default function Home() {
   const myOrder = useStore((s) => s.myOrder);
   const myRun = useStore((s) => s.myRun);
   const pastOrders = useStore((s) => s.pastOrders);
-  const tick = useStore((s) => s.tick);
-  const [now, setNow] = useState(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      setNow(Date.now());
-      const t = setInterval(() => {
-        tick();
-        setNow(Date.now());
-      }, 1000);
-      return () => clearInterval(t);
-    }, [tick]),
-  );
+  // The clock itself runs at the root, so progress keeps moving on every tab.
+  const now = useNow();
 
   const dest = destinationById(destinationId);
   const destShort = dest?.name.replace(' Library', '') ?? '';
@@ -53,7 +46,6 @@ export default function Home() {
       r.destinationId === destinationId &&
       r.status === 'open' &&
       r.runner.id !== me?.id &&
-      now > 0 &&
       new Date(r.leaveAt).getTime() - now < 20 * 60_000,
   );
   const heading = runs.filter(
@@ -73,7 +65,7 @@ export default function Home() {
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
           {/* Block 1: greeting */}
-          <View style={styles.top}>
+          <Animated.View entering={FadeInDown.duration(420).delay(stagger(0))} style={styles.top}>
             <View>
               <Text style={[type.eyebrow as object, { fontFamily: fonts.semiBold }]}>
                 {dayName()}
@@ -86,8 +78,9 @@ export default function Home() {
             <Pressable onPress={() => router.push('/account')} accessibilityLabel="Account">
               <Avatar initials={me?.initials ?? '?'} size={40} />
             </Pressable>
-          </View>
+          </Animated.View>
 
+          <Animated.View entering={FadeInDown.duration(420).delay(stagger(1))}>
           <Pressable onPress={() => router.push('/onboarding')} accessibilityLabel="Change location">
             <GlassCard radius={radius.pill} padding={0} style={{ alignSelf: 'flex-start', marginTop: 14 }}>
               <View style={styles.pillInner}>
@@ -96,8 +89,10 @@ export default function Home() {
               </View>
             </GlassCard>
           </Pressable>
+          </Animated.View>
 
           {/* Block 2: hero */}
+          <Animated.View entering={FadeInDown.duration(420).delay(stagger(2))}>
           <GlassCard style={{ marginTop: 16 }}>
             <Text style={[type.cardHeadline as object, { fontFamily: fonts.bold }]}>
               Hungry? Food is{'\n'}already headed your way.
@@ -113,17 +108,20 @@ export default function Home() {
               style={{ marginTop: 20 }}
             />
           </GlassCard>
+          </Animated.View>
 
-          <SecondaryButton
-            label={myRun ? 'Your active run' : 'Post a run and earn'}
-            icon={<Plus size={17} color={colors.navy} strokeWidth={2} />}
-            onPress={() => router.push(myRun ? '/active-run' : '/post-run')}
-            style={{ marginTop: 12 }}
-          />
+          <Animated.View entering={FadeInDown.duration(420).delay(stagger(3))}>
+            <SecondaryButton
+              label={myRun ? 'Your active run' : 'Post a run and earn'}
+              icon={<Plus size={17} color={colors.navy} strokeWidth={2} />}
+              onPress={() => router.push(myRun ? '/active-run' : '/post-run')}
+              style={{ marginTop: 12 }}
+            />
+          </Animated.View>
 
           {/* Block 3: active order */}
           {myOrder ? (
-            <>
+            <Animated.View entering={FadeInDown.duration(380)} layout={LinearTransition}>
               <Text style={styles.sectionLabel}>ACTIVE ORDER</Text>
               <GlassCard
                 padding={18}
@@ -140,17 +138,26 @@ export default function Home() {
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.eta}>
-                      {myOrder.status === 'arrived' ? 'Here' : (myOrder.etaMinutes ?? '–')}
-                    </Text>
+                    <AnimatedNumber
+                      value={myOrder.status === 'arrived' ? 'Here' : (myOrder.etaMinutes ?? '–')}
+                      style={styles.eta}
+                      label={
+                        myOrder.status === 'arrived'
+                          ? 'Your runner is here'
+                          : `Arriving in ${myOrder.etaMinutes ?? 'a few'} minutes`
+                      }
+                    />
                     {myOrder.status !== 'arrived' ? <Text style={styles.etaUnit}>min</Text> : null}
                   </View>
                 </View>
                 <View style={styles.track}>
-                  <View style={[styles.trackFill, { width: `${progress}%` }]} />
+                  <Animated.View
+                    style={[styles.trackFill, { width: `${progress}%` }]}
+                    layout={LinearTransition.springify().damping(20).stiffness(180)}
+                  />
                 </View>
               </GlassCard>
-            </>
+            </Animated.View>
           ) : null}
 
           {/* Block 4 (P8): runs heading your way / earn card / order again */}
@@ -163,15 +170,19 @@ export default function Home() {
                 style={{ marginTop: 10, marginHorizontal: -layout.screenMargin }}
                 contentContainerStyle={{ paddingHorizontal: layout.screenMargin, gap: 12 }}
               >
-                {heading.slice(0, 3).map((r) => (
-                  <View key={r.id} style={{ width: 300 }}>
+                {heading.slice(0, 3).map((r, i) => (
+                  <Animated.View
+                    key={r.id}
+                    entering={FadeInDown.duration(380).delay(stagger(i + 4))}
+                    style={{ width: 300 }}
+                  >
                     <RunCard
                       run={r}
                       compact
                       myDestinationId={destinationId}
                       onJoin={() => router.push({ pathname: '/join/[runId]', params: { runId: r.id } })}
                     />
-                  </View>
+                  </Animated.View>
                 ))}
               </ScrollView>
             </>

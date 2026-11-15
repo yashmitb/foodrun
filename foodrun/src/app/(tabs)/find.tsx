@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppBackground } from '@/components/AppBackground';
@@ -17,7 +18,8 @@ import { GlassCard } from '@/components/GlassCard';
 import { RunCard } from '@/components/RunCard';
 import { useToast } from '@/components/Toast';
 import { DESTINATIONS, HALLS, destinationById, hallById, isOpenNow } from '@/data/dining';
-import { useStore } from '@/data/store';
+import { isActiveOrder, useStore } from '@/data/store';
+import { haptic, stagger } from '@/lib/motion';
 import { colors, fonts, layout, radius, type } from '@/theme';
 
 /**
@@ -29,6 +31,8 @@ export default function Find() {
   const toast = useToast();
   const me = useStore((s) => s.me);
   const runs = useStore((s) => s.runs);
+  const myOrder = useStore((s) => s.myOrder);
+  const hasActiveOrder = isActiveOrder(myOrder);
   const destinationId = useStore((s) => s.destinationId);
   const [destFilter, setDestFilter] = useState<string | 'anywhere'>(destinationId);
   const [hallFilter, setHallFilter] = useState<string>('all');
@@ -137,7 +141,10 @@ export default function Find() {
             {[{ id: 'all', name: 'All' }, ...visibleHalls].map((h) => (
               <Pressable
                 key={h.id}
-                onPress={() => setHallFilter(h.id)}
+                onPress={() => {
+                  if (hallFilter !== h.id) haptic('select');
+                  setHallFilter(h.id);
+                }}
                 style={[styles.hallChip, hallFilter === h.id && styles.hallChipOn]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: hallFilter === h.id }}
@@ -155,7 +162,10 @@ export default function Find() {
               {(['now', 'scheduled'] as const).map((w) => (
                 <Pressable
                   key={w}
-                  onPress={() => setWhen(w)}
+                  onPress={() => {
+                    if (when !== w) haptic('select');
+                    setWhen(w);
+                  }}
                   style={[styles.segBtn, when === w && styles.segBtnOn]}
                 >
                   <Text style={[styles.segText, when === w && styles.segTextOn]}>
@@ -166,20 +176,49 @@ export default function Find() {
             </View>
           </GlassCard>
 
-          {list.map((r) => (
-            <View key={r.id} style={{ marginTop: 12 }}>
+          {hasActiveOrder ? (
+            <Animated.View entering={FadeIn.duration(260)} style={{ marginTop: 14 }}>
+              <GlassCard
+                radius={radius.runCard}
+                padding={14}
+                onPress={() => router.push('/order')}
+                accessibilityLabel="Open your active order"
+              >
+                <Text style={styles.bannerTitle}>You already have an order in flight</Text>
+                <Text style={styles.bannerBody}>
+                  Only one at a time. Tap to track it, or cancel it to join another run.
+                </Text>
+              </GlassCard>
+            </Animated.View>
+          ) : null}
+
+          {list.map((r, i) => (
+            <Animated.View
+              key={r.id}
+              entering={FadeInDown.duration(360).delay(stagger(i))}
+              layout={LinearTransition.springify().damping(20).stiffness(180)}
+              style={{ marginTop: 12 }}
+            >
               <RunCard
                 run={r}
                 myDestinationId={destFilter === 'anywhere' ? destinationId : destFilter}
-                onJoin={(run) =>
-                  router.push({ pathname: '/join/[runId]', params: { runId: run.id } })
-                }
+                onJoin={(run) => {
+                  if (hasActiveOrder) {
+                    haptic('warning');
+                    toast.show({
+                      message: 'Finish or cancel your current order first.',
+                      action: { label: 'View', onPress: () => router.push('/order') },
+                    });
+                    return;
+                  }
+                  router.push({ pathname: '/join/[runId]', params: { runId: run.id } });
+                }}
               />
-            </View>
+            </Animated.View>
           ))}
 
           {list.length === 0 ? (
-            <View style={styles.empty}>
+            <Animated.View entering={FadeIn.duration(300)} style={styles.empty}>
               <Text style={styles.emptyTitle}>
                 No {when === 'scheduled' ? 'scheduled ' : ''}runs
                 {hallFilter !== 'all' ? ` from ${hallById(hallFilter)?.name}` : ''} right now.
@@ -193,7 +232,7 @@ export default function Find() {
                 }
                 style={{ marginTop: 14, alignSelf: 'center' }}
               />
-            </View>
+            </Animated.View>
           ) : null}
 
           <View style={{ height: 130 }} />
@@ -255,4 +294,6 @@ const styles = StyleSheet.create({
   segTextOn: { color: colors.navy, fontFamily: fonts.semiBold },
   empty: { alignItems: 'center', paddingVertical: 30, paddingHorizontal: 10 },
   emptyTitle: { fontSize: 15, color: colors.muted, fontFamily: fonts.regular, textAlign: 'center' },
+  bannerTitle: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.navy },
+  bannerBody: { marginTop: 3, fontSize: 13, color: colors.muted, fontFamily: fonts.regular },
 });

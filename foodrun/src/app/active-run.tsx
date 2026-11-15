@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { ChevronLeft, MapPin } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppBackground } from '@/components/AppBackground';
@@ -12,6 +13,8 @@ import { useToast } from '@/components/Toast';
 import { destinationById, hallById } from '@/data/dining';
 import { useStore } from '@/data/store';
 import { clockTime, countdown, money } from '@/lib/format';
+import { haptic, stagger } from '@/lib/motion';
+import { useNow } from '@/lib/useAppClock';
 import { colors, fonts, layout, type } from '@/theme';
 
 /**
@@ -32,12 +35,7 @@ export default function ActiveRun() {
 
   const [codeFor, setCodeFor] = useState<string | null>(null);
   const [codeInput, setCodeInput] = useState('');
-  const [, force] = useState(0);
-
-  React.useEffect(() => {
-    const t = setInterval(() => force((x) => x + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
+  const now = useNow();
 
   if (!run) {
     return (
@@ -84,11 +82,17 @@ export default function ActiveRun() {
             </View>
           </View>
 
-          {orders.map((o) => {
+          {orders.map((o, idx) => {
             const pending = o.status === 'pending';
-            const cd = pending ? countdown(o.cancelUntil) : null;
+            const cd = pending ? countdown(o.cancelUntil, now) : null;
             return (
-              <GlassCard key={o.id} padding={16} style={{ marginTop: 12, opacity: pending ? 0.6 : 1 }}>
+              <Animated.View
+                key={o.id}
+                entering={FadeInDown.duration(360).delay(stagger(idx))}
+                layout={LinearTransition.springify().damping(20).stiffness(180)}
+                style={{ marginTop: 12, opacity: pending ? 0.6 : 1 }}
+              >
+              <GlassCard padding={16}>
                 <View style={styles.row}>
                   <Avatar initials={o.ordererName.slice(0, 2).toUpperCase()} size={40} />
                   <View style={{ flex: 1 }}>
@@ -111,7 +115,10 @@ export default function ActiveRun() {
                   <View style={styles.actionRow}>
                     <PrimaryButton
                       label="Mark picked up"
-                      onPress={() => markPickedUp(o.id)}
+                      onPress={() => {
+                        haptic('success');
+                        markPickedUp(o.id);
+                      }}
                       style={styles.smallBtn}
                     />
                     <SecondaryButton
@@ -142,6 +149,7 @@ export default function ActiveRun() {
                         disabled={codeInput.length !== 4}
                         onPress={() => {
                           const ok = deliver(o.id, codeInput);
+                          haptic(ok ? 'success' : 'error');
                           setCodeInput('');
                           setCodeFor(null);
                           toast.show({
@@ -177,6 +185,7 @@ export default function ActiveRun() {
                   </Text>
                 )}
               </GlassCard>
+              </Animated.View>
             );
           })}
 
@@ -188,6 +197,7 @@ export default function ActiveRun() {
             <PrimaryButton
               label={`Start delivering · ${pickedCount} ${pickedCount === 1 ? 'bag' : 'bags'}`}
               onPress={() => {
+                haptic('success');
                 startDelivering();
                 toast.show({ message: 'Orderers can see you on the way.' });
               }}
@@ -196,6 +206,7 @@ export default function ActiveRun() {
           ) : null}
 
           {deliveredAll ? (
+            <Animated.View entering={FadeIn.duration(400)}>
             <GlassCard style={{ marginTop: 16 }}>
               <Text style={[type.cardHeadline as object, { fontFamily: fonts.bold }]}>
                 Run done. {money(earningsCents)} earned 🎉
@@ -209,6 +220,7 @@ export default function ActiveRun() {
                 style={{ marginTop: 16 }}
               />
             </GlassCard>
+            </Animated.View>
           ) : null}
 
           <View style={{ height: 60 }} />

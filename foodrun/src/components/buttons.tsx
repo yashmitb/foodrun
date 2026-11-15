@@ -1,27 +1,15 @@
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
-import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, ViewStyle, StyleProp } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect } from 'react';
+import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 
-import { colors, fonts, glass, motion, radius } from '@/theme';
-
-function usePressScale(scaleTo: number) {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const onPressIn = () => {
-    scale.set(withTiming(scaleTo, { duration: 90 }));
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-  const onPressOut = () => {
-    scale.set(withTiming(1, { duration: 140 }));
-  };
-  return { style, onPressIn, onPressOut };
-}
+import { SPRING_GENTLE, usePressAnimation } from '@/lib/motion';
+import { colors, fonts, glass, radius } from '@/theme';
 
 type PrimaryProps = {
   /** Says exactly what happens ("Join run · $2"). */
@@ -34,31 +22,52 @@ type PrimaryProps = {
 };
 
 /**
- * §3.5 — Primary button: orange pill, NAVY 17/700 text (white on orange fails
- * WCAG — never use it), orange glow shadow, scale 0.97 on press + light haptic.
+ * §3.5 — Primary button: orange pill, NAVY 17/700 text (white on orange is
+ * 2.5:1 and fails WCAG — never use it), orange glow, spring press + haptic.
+ *
+ * The enabled→disabled change is animated: the label often swaps between
+ * "Add last 4 digits" and "Review" as the user fills the Join sheet, and a
+ * hard color cut there is the single jumpiest thing in the flow.
  */
 export function PrimaryButton({ label, onPress, disabled, icon, style }: PrimaryProps) {
-  const { style: pressStyle, onPressIn, onPressOut } = usePressScale(motion.pressScale);
+  const press = usePressAnimation({ scaleTo: 0.96, haptic: 'medium' });
+  const enabled = useSharedValue(disabled ? 0 : 1);
+
+  useEffect(() => {
+    enabled.set(withSpring(disabled ? 0 : 1, SPRING_GENTLE));
+  }, [disabled, enabled]);
+
+  const fillStyle = useAnimatedStyle(() => ({ opacity: enabled.get() }));
+  const glowStyle = useAnimatedStyle(() => ({
+    shadowOpacity: enabled.get() * 0.35,
+  }));
+
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
-      onPressIn={disabled ? undefined : onPressIn}
-      onPressOut={disabled ? undefined : onPressOut}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
       accessibilityLabel={label}
+      {...(disabled ? {} : press.handlers)}
     >
-      <Animated.View
-        style={[
-          styles.primary,
-          disabled ? styles.primaryDisabled : styles.primaryEnabled,
-          pressStyle,
-          style,
-        ]}
-      >
-        <Text style={[styles.primaryText, disabled && styles.primaryTextDisabled]}>{label}</Text>
-        {icon ? <View style={styles.icon}>{icon}</View> : null}
+      <Animated.View style={[styles.glow, glowStyle, press.style, style]}>
+        <View style={styles.primary}>
+          <View style={styles.disabledFill} />
+          <Animated.View style={[StyleSheet.absoluteFill, fillStyle]}>
+            <LinearGradient
+              // a touch lighter at the top: the pill reads as lit, not flat
+              colors={['#F79A3D', colors.orange]}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+          <View style={styles.primaryContent}>
+            <Text style={[styles.primaryText, disabled && styles.primaryTextDisabled]}>
+              {label}
+            </Text>
+            {icon ? <View style={styles.icon}>{icon}</View> : null}
+          </View>
+        </View>
       </Animated.View>
     </Pressable>
   );
@@ -73,47 +82,60 @@ type SecondaryProps = {
 
 /** §3.5 — Secondary button: glass pill, navy 15/600 text, optional leading icon. */
 export function SecondaryButton({ label, onPress, icon, style }: SecondaryProps) {
-  const { style: pressStyle, onPressIn, onPressOut } = usePressScale(motion.pressScale);
+  const press = usePressAnimation({ scaleTo: 0.97, dimTo: 0.92, haptic: 'light' });
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
       accessibilityRole="button"
       accessibilityLabel={label}
+      {...press.handlers}
     >
-      <Animated.View style={[styles.secondaryWrap, glass.shadow, pressStyle, style]}>
-        <BlurView intensity={glass.blurIntensity} tint="light" style={styles.secondaryBlur}>
+      <Animated.View style={[styles.secondaryShadow, press.style, style]}>
+        <View style={styles.secondaryClip}>
+          <BlurView intensity={glass.blurIntensity} tint="light" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: glass.fill }]} />
+          <LinearGradient
+            colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           <View style={styles.secondaryInner}>
             {icon ? <View style={styles.icon}>{icon}</View> : null}
             <Text style={styles.secondaryText}>{label}</Text>
           </View>
-        </BlurView>
+        </View>
       </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  glow: {
+    borderRadius: radius.pill,
+    shadowColor: colors.orange,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 18,
+    elevation: 5,
+  },
   primary: {
     borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  disabledFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(18,53,91,0.12)',
+  },
+  primaryContent: {
     paddingVertical: 15,
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-  },
-  primaryEnabled: {
-    backgroundColor: colors.orange,
-    shadowColor: colors.orange,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 18,
-    shadowOpacity: 0.35,
-    elevation: 5,
-  },
-  primaryDisabled: {
-    backgroundColor: 'rgba(18,53,91,0.12)',
   },
   primaryText: {
     fontSize: 17,
@@ -124,18 +146,21 @@ const styles = StyleSheet.create({
   primaryTextDisabled: {
     color: colors.faint,
   },
-  secondaryWrap: {
+  secondaryShadow: {
     borderRadius: radius.pill,
+    shadowColor: '#12355B',
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 20,
+    shadowOpacity: 0.07,
+    elevation: 3,
   },
-  secondaryBlur: {
+  secondaryClip: {
     borderRadius: radius.pill,
     overflow: 'hidden',
-    backgroundColor: glass.fill,
-  },
-  secondaryInner: {
-    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: glass.border,
+  },
+  secondaryInner: {
     paddingVertical: 13,
     paddingHorizontal: 20,
     flexDirection: 'row',

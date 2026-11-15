@@ -11,7 +11,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { SlideInDown } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 
@@ -23,7 +30,12 @@ import { destinationById, hallById } from '@/data/dining';
 import { useJoinDraft } from '@/data/joinDraft';
 import { useStore } from '@/data/store';
 import { clockTime, money } from '@/lib/format';
+import { SPRING_SHEET, haptic } from '@/lib/motion';
 import { colors, fonts, glass } from '@/theme';
+
+/** Past this far down (or this fast), the sheet goes rather than snapping back. */
+const DISMISS_DISTANCE = 130;
+const DISMISS_VELOCITY = 900;
 
 function dropSpotsFor(destName: string): string[] {
   if (destName.includes('Geisel'))
@@ -57,6 +69,61 @@ export default function JoinSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
+  // Sheet presentation + drag-to-dismiss.
+  const translateY = useSharedValue(900);
+  const dragging = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.set(withSpring(0, SPRING_SHEET));
+  }, [translateY]);
+
+  const dismiss = React.useCallback(() => {
+    draft.clear();
+    router.back();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animateOut = React.useCallback(() => {
+    translateY.set(withTiming(900, { duration: 220 }, (done) => {
+      if (done) runOnJS(dismiss)();
+    }));
+  }, [translateY, dismiss]);
+
+  const pan = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .onStart(() => {
+          dragging.set(1);
+        })
+        .onUpdate((e) => {
+          // Rubber-band upward drags so the sheet resists instead of detaching.
+          translateY.set(e.translationY < 0 ? e.translationY * 0.22 : e.translationY);
+        })
+        .onEnd((e) => {
+          dragging.set(0);
+          if (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY) {
+            runOnJS(haptic)('light');
+            translateY.set(
+              withTiming(900, { duration: 200 }, (done) => {
+                if (done) runOnJS(dismiss)();
+              }),
+            );
+          } else {
+            translateY.set(withSpring(0, { ...SPRING_SHEET, velocity: e.velocityY }));
+          }
+        }),
+    [translateY, dragging, dismiss],
+  );
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.get() }],
+  }));
+
+  // Scrim tracks the drag, so pulling down reveals the list behind it.
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: Math.max(0, 1 - translateY.get() / 420),
+  }));
+
   if (!run) return null;
   const hall = hallById(run.hallId);
   const dest = destinationById(run.destinationId);
@@ -71,40 +138,54 @@ export default function JoinSheet() {
         ? 'Set your drop spot'
         : null;
 
-  const close = () => {
-    draft.clear();
-    router.back();
-  };
+  const close = animateOut;
 
   const confirm = () => {
-    const order = joinRun({
+    const result = joinRun({
       runId: run.id,
       restaurant: draft.restaurant!,
       last4: draft.last4,
       orderName: draft.orderName || me?.firstName || '',
       dropSpot: draft.dropSpot!,
     });
-    draft.clear();
-    if (!order) {
-      toast.show({ message: 'This run just filled up.' });
+    if (!result.ok) {
+      haptic('warning');
+      toast.show({
+        message:
+          result.reason === 'has_order'
+            ? 'You already have an order in flight. Cancel it before joining another run.'
+            : result.reason === 'full'
+              ? 'This run just filled up.'
+              : "That run isn't available anymore.",
+        action:
+          result.reason === 'has_order'
+            ? { label: 'View', onPress: () => router.replace('/order') }
+            : undefined,
+      });
+      draft.clear();
       router.back();
       return;
     }
+    haptic('success');
+    draft.clear();
     router.replace('/order');
   };
 
   return (
     <View style={styles.root}>
-      <Pressable style={styles.scrim} onPress={close} accessibilityLabel="Close" />
-      <Animated.View entering={SlideInDown.duration(300)} style={styles.sheetWrap}>
-        <BlurView intensity={glass.sheetBlurIntensity} tint="light" style={styles.sheetBlur}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-              showsVerticalScrollIndicator={false}
-              style={{ maxHeight: 640 }}
-            >
+      <Animated.View style={[styles.scrim, scrimStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
+      </Animated.View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[styles.sheetWrap, sheetStyle]}>
+          <BlurView intensity={glass.sheetBlurIntensity} tint="light" style={styles.sheetBlur}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: 640 }}
+              >
               <View style={styles.grab} />
               <View style={styles.header}>
                 <Avatar initials={run.runner.initials} />
@@ -299,10 +380,11 @@ export default function JoinSheet() {
                   </Pressable>
                 </>
               )}
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </BlurView>
-      </Animated.View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </BlurView>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
