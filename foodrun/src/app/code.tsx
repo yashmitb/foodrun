@@ -1,6 +1,7 @@
+import * as Brightness from 'expo-brightness';
 import { router } from 'expo-router';
-import React from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text } from 'react-native';
 
 import { CodeTiles } from '@/components/CodeTiles';
 import { useStore } from '@/data/store';
@@ -11,17 +12,42 @@ export default function BigCode() {
   const order = useStore((s) => s.myOrder);
   const runs = useStore((s) => s.runs);
   const runner = runs.find((r) => r.id === order?.runId)?.runner;
+  const [bright, setBright] = useState(false);
 
-  if (!order) {
-    router.back();
-    return null;
-  }
+  // Navigating during render updates the router while this component renders.
+  useEffect(() => {
+    if (!order) router.back();
+  }, [order]);
+
+  /**
+   * The point of this screen is that a runner can read the code across a
+   * table, so the screen really does go to full brightness. It used to only
+   * claim it did — the label was there with nothing behind it.
+   */
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let cancelled = false;
+    (async () => {
+      const { granted } = await Brightness.requestPermissionsAsync();
+      if (!granted || cancelled) return;
+      await Brightness.setBrightnessAsync(1);
+      if (!cancelled) setBright(true);
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+      Brightness.restoreSystemBrightnessAsync().catch(() => {});
+    };
+  }, []);
+
+  if (!order) return null;
 
   return (
     <Pressable style={styles.root} onPress={() => router.back()} accessibilityLabel="Close code">
-      <Text style={styles.label}>SHOW {runner?.firstName?.toUpperCase() ?? 'YOUR RUNNER'} THIS CODE</Text>
+      <Text style={styles.label}>
+        SHOW {runner?.firstName?.toUpperCase() ?? 'YOUR RUNNER'} THIS CODE
+      </Text>
       <CodeTiles code={order.handoffCode} size="big" />
-      <Text style={styles.sub}>Screen brightness turned up</Text>
+      {bright ? <Text style={styles.sub}>Screen brightness turned up</Text> : null}
       <Text style={styles.closeChip}>Tap anywhere to close</Text>
     </Pressable>
   );

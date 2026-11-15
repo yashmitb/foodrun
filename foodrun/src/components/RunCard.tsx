@@ -7,7 +7,7 @@ import { PrimaryButton } from '@/components/buttons';
 import { GlassCard } from '@/components/GlassCard';
 import { destinationById, hallById } from '@/data/dining';
 import type { Run } from '@/data/types';
-import { clockTime, money } from '@/lib/format';
+import { clockTime, dayClockTime, money } from '@/lib/format';
 import { colors, fonts, radius } from '@/theme';
 
 type Props = {
@@ -16,13 +16,15 @@ type Props = {
   /** Highlight the end dot when it matches the user's destination (P1). */
   myDestinationId?: string;
   compact?: boolean;
+  /** Spell the leave time out with am/pm and a day (the Scheduled list). */
+  showDay?: boolean;
 };
 
 /**
  * §6.2 — Run card. Row 1 runner + price, row 2 route line with labeled dots
  * (start orange, end navy), row 3 leave time + spots + Join.
  */
-export function RunCard({ run, onJoin, myDestinationId, compact }: Props) {
+export function RunCard({ run, onJoin, myDestinationId, compact, showDay }: Props) {
   const hall = hallById(run.hallId);
   const dest = destinationById(run.destinationId);
   const mine = run.destinationId === myDestinationId;
@@ -53,7 +55,12 @@ export function RunCard({ run, onJoin, myDestinationId, compact }: Props) {
         <View style={styles.meta}>
           <View style={styles.metaItem}>
             <Clock size={14} color={colors.muted} strokeWidth={1.8} />
-            <Text style={styles.metaText}>{clockTime(run.leaveAt)}</Text>
+            {/* A bare "1:37" is clear enough for a run leaving in minutes and
+                says nothing on the Scheduled list, where the same card can mean
+                tonight or tomorrow — so that list spells the time out. */}
+            <Text style={styles.metaText}>
+              {showDay ? dayClockTime(run.leaveAt) : clockTime(run.leaveAt)}
+            </Text>
           </View>
           <View style={styles.metaItem}>
             <User size={14} color={colors.muted} strokeWidth={1.8} />

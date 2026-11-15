@@ -26,7 +26,11 @@ const mkProfile = (name: string, email: string, rating = 4.8, count = 23): Profi
     id: uid(),
     name,
     firstName: parts[0],
-    initials: parts.map((p) => p[0]!.toUpperCase()).join('').slice(0, 2),
+    initials:
+      parts
+        .map((p) => p[0]?.toUpperCase() ?? '')
+        .join('')
+        .slice(0, 2) || 'T',
     ucsdEmail: email,
     ratingAvg: rating,
     ratingCount: count,
@@ -129,6 +133,8 @@ type State = {
   signedIn: boolean;
   onboarded: boolean;
   me: Profile | null;
+  /** True while `me.name` is still the guess made from the email handle. */
+  nameIsGuess: boolean;
   destinationId: string;
   dropSpot: string | null;
   recentSpots: string[];
@@ -187,6 +193,8 @@ export const useStore = create<State>((set, get) => ({
   recentSpots: ['Geisel 2F, Table 14', 'Geisel 8F, East window', 'Price Center, Lobby couches'],
 
   runs: [],
+  nameIsGuess: false,
+
   myOrder: null,
   pastOrders: [],
 
@@ -197,9 +205,15 @@ export const useStore = create<State>((set, get) => ({
 
   signIn: (email) => {
     const handle = email.split('@')[0];
-    const pretty = handle.charAt(0).toUpperCase() + handle.slice(1).replace(/[._\d]+/g, ' ').trim();
+    const pretty = handle
+      .split(/[._\d]+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
     set({
       signedIn: true,
+      // Derived from the email, so onboarding must treat it as a suggestion.
+      nameIsGuess: true,
       me: mkProfile(pretty || 'Triton', email, 5.0, 0),
       runs: seedRuns(get().destinationId),
     });
@@ -208,6 +222,7 @@ export const useStore = create<State>((set, get) => ({
     set({
       signedIn: false,
       onboarded: false,
+      nameIsGuess: false,
       me: null,
       myOrder: null,
       myRun: null,
@@ -217,6 +232,7 @@ export const useStore = create<State>((set, get) => ({
     const me = get().me;
     set({
       onboarded: true,
+      nameIsGuess: false,
       me: me ? { ...mkProfile(name, me.ucsdEmail, 5.0, 0), id: me.id } : me,
       destinationId,
       runs: seedRuns(destinationId),

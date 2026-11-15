@@ -48,7 +48,8 @@ export default function ActiveRun() {
             <PrimaryButton
               label="Post a run"
               onPress={() => router.replace('/post-run')}
-              style={{ marginTop: 20, paddingHorizontal: 40 }}
+              style={{ marginTop: 20 }}
+              contentStyle={{ paddingHorizontal: 40 }}
             />
           </View>
         </SafeAreaView>
@@ -90,8 +91,11 @@ export default function ActiveRun() {
                 key={o.id}
                 entering={enterUp(stagger(idx))}
                 layout={LAYOUT}
-                style={{ marginTop: 12, opacity: pending ? 0.6 : 1 }}
+                style={{ marginTop: 12 }}
               >
+              {/* Reanimated owns opacity on a view that carries entering/layout,
+                  so the dimming lives on an inner view instead. */}
+              <View style={{ opacity: pending ? 0.6 : 1 }}>
               <GlassCard padding={16}>
                 <View style={styles.row}>
                   <Avatar initials={o.ordererName.slice(0, 2).toUpperCase()} size={40} />
@@ -120,6 +124,7 @@ export default function ActiveRun() {
                         markPickedUp(o.id);
                       }}
                       style={styles.smallBtn}
+                      contentStyle={styles.smallBtnInner}
                     />
                     <SecondaryButton
                       label="Not ready yet"
@@ -128,6 +133,7 @@ export default function ActiveRun() {
                         toast.show({ message: `${o.ordererName} can see it's not ready.` });
                       }}
                       style={styles.smallBtn}
+                      contentStyle={styles.smallBtnInner}
                     />
                   </View>
                 ) : o.status === 'picked_up' ? (
@@ -159,6 +165,7 @@ export default function ActiveRun() {
                           });
                         }}
                         style={styles.smallBtn}
+                      contentStyle={styles.smallBtnInner}
                       />
                     </View>
                   ) : (
@@ -167,6 +174,7 @@ export default function ActiveRun() {
                         label={`Enter ${o.ordererName}'s code`}
                         onPress={() => setCodeFor(o.id)}
                         style={styles.smallBtn}
+                      contentStyle={styles.smallBtnInner}
                       />
                       <SecondaryButton
                         label="Can't find them"
@@ -176,6 +184,7 @@ export default function ActiveRun() {
                           })
                         }
                         style={styles.smallBtn}
+                      contentStyle={styles.smallBtnInner}
                       />
                     </View>
                   )
@@ -185,6 +194,7 @@ export default function ActiveRun() {
                   </Text>
                 )}
               </GlassCard>
+              </View>
               </Animated.View>
             );
           })}
@@ -256,7 +266,8 @@ const styles = StyleSheet.create({
   pendingNote: { marginTop: 12, fontSize: 13, color: colors.faint, fontFamily: fonts.medium },
   statusNote: { marginTop: 12, fontSize: 14, color: colors.navy, fontFamily: fonts.semiBold },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap' },
-  smallBtn: { paddingVertical: 10, paddingHorizontal: 16, flexGrow: 1 },
+  smallBtn: { flexGrow: 1, flexBasis: 0 },
+  smallBtnInner: { paddingVertical: 11, paddingHorizontal: 14 },
   codeRow: { flexDirection: 'row', gap: 10, marginTop: 14, alignItems: 'center' },
   codeInput: {
     flex: 1,

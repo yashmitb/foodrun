@@ -63,7 +63,8 @@ export default function MyOrder() {
             <PrimaryButton
               label="Find a Run"
               onPress={() => router.push('/find')}
-              style={{ marginTop: 20, alignSelf: 'center', paddingHorizontal: 40 }}
+              style={{ marginTop: 20, alignSelf: 'center' }}
+              contentStyle={{ paddingHorizontal: 40 }}
             />
           </View>
         </SafeAreaView>

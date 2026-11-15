@@ -12,7 +12,7 @@ import { PrimaryButton, SecondaryButton } from '@/components/buttons';
 import { GlassCard } from '@/components/GlassCard';
 import { RunCard } from '@/components/RunCard';
 import { destinationById, hallById } from '@/data/dining';
-import { useStore } from '@/data/store';
+import { isActiveOrder, useStore } from '@/data/store';
 import { dayName, greeting } from '@/lib/format';
 import { LAYOUT, enterUp, stagger } from '@/lib/motion';
 import { useNow } from '@/lib/useAppClock';
@@ -33,7 +33,13 @@ export default function Home() {
   const destinationId = useStore((s) => s.destinationId);
   const dropSpot = useStore((s) => s.dropSpot);
   const runs = useStore((s) => s.runs);
-  const myOrder = useStore((s) => s.myOrder);
+  const storedOrder = useStore((s) => s.myOrder);
+  /**
+   * A delivered order is finished, not active. It stays in the store until the
+   * next join archives it, so without this the Home card kept showing
+   * "Delivered" under an ACTIVE ORDER heading, with an empty ETA beside it.
+   */
+  const myOrder = isActiveOrder(storedOrder) ? storedOrder : null;
   const myRun = useStore((s) => s.myRun);
   const pastOrders = useStore((s) => s.pastOrders);
   // The clock itself runs at the root, so progress keeps moving on every tab.
@@ -139,7 +145,7 @@ export default function Home() {
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <AnimatedNumber
-                      value={myOrder.status === 'arrived' ? 'Here' : (myOrder.etaMinutes ?? '–')}
+                      value={myOrder.status === 'arrived' ? 'Here' : (myOrder.etaMinutes || '–')}
                       style={styles.eta}
                       label={
                         myOrder.status === 'arrived'

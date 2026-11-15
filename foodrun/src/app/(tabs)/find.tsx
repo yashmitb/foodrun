@@ -166,6 +166,9 @@ export default function Find() {
                     if (when !== w) haptic('select');
                     setWhen(w);
                   }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: when === w }}
+                  accessibilityLabel={w === 'now' ? 'Runs leaving now' : 'Scheduled runs'}
                   style={[styles.segBtn, when === w && styles.segBtnOn]}
                 >
                   <Text style={[styles.segText, when === w && styles.segTextOn]}>
@@ -201,6 +204,7 @@ export default function Find() {
             >
               <RunCard
                 run={r}
+                showDay={when === 'scheduled'}
                 myDestinationId={destFilter === 'anywhere' ? destinationId : destFilter}
                 onJoin={(run) => {
                   if (hasActiveOrder) {

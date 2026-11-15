@@ -11,6 +11,27 @@ export function clockTime(iso: string): string {
   return `${h}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/**
+ * "9:30pm", "Tomorrow 1:23am" — for times that are not obviously soon.
+ *
+ * `clockTime` drops am/pm to match the prototype, which only ever showed
+ * runs leaving in the next few minutes. Scheduled runs (§6.6) can be tomorrow,
+ * and a bare "1:23" next to one of those says nothing useful.
+ */
+export function dayClockTime(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const h12 = d.getHours() % 12 || 12;
+  const mins = String(d.getMinutes()).padStart(2, '0');
+  const suffix = d.getHours() < 12 ? 'am' : 'pm';
+  const time = `${h12}:${mins}${suffix}`;
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return time;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow ${time}`;
+  return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
+}
+
 /** "1:42" mm:ss countdown to an ISO deadline; null when passed. */
 export function countdown(untilIso: string, now = Date.now()): string | null {
   const ms = new Date(untilIso).getTime() - now;

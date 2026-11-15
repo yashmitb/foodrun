@@ -20,7 +20,14 @@ const CARDS = [
 export default function Onboarding() {
   const me = useStore((s) => s.me);
   const complete = useStore((s) => s.completeOnboarding);
-  const [name, setName] = useState(me?.name === 'Triton' ? '' : (me?.name ?? ''));
+  /**
+   * The name from sign-in is guessed from the email handle, so it is offered
+   * as a suggestion and selected on focus: typing replaces it. Previously it
+   * was prefilled as if the user had typed it, and typing a real name
+   * appended to the guess ("Demo" + "Demo" = "DemoDemo").
+   */
+  const nameIsGuess = useStore((s) => s.nameIsGuess);
+  const [name, setName] = useState(nameIsGuess ? '' : (me?.name ?? ''));
   const [dest, setDest] = useState('geisel');
 
   const ready = name.trim().length >= 2;
@@ -52,8 +59,10 @@ export default function Onboarding() {
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="First Last"
+              placeholder={nameIsGuess && me?.name ? me.name : 'First Last'}
               placeholderTextColor="#A6AFBC"
+              autoCapitalize="words"
+              autoComplete="name"
               style={styles.input}
             />
             <Text style={[styles.label, { marginTop: 18 }]}>YOUR USUAL SPOT</Text>

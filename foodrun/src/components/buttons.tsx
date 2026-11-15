@@ -17,7 +17,10 @@ type PrimaryProps = {
   /** Disabled buttons say what's missing ("Add your order #"). */
   disabled?: boolean;
   icon?: React.ReactNode;
+  /** Layout for the button itself: margin, flexGrow, alignSelf. */
   style?: StyleProp<ViewStyle>;
+  /** Padding inside the pill. Separate because `style` sits outside it. */
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 /**
@@ -28,7 +31,7 @@ type PrimaryProps = {
  * "Add last 4 digits" and "Review" as the user fills the Join sheet, and a
  * hard color cut there is the single jumpiest thing in the flow.
  */
-export function PrimaryButton({ label, onPress, disabled, icon, style }: PrimaryProps) {
+export function PrimaryButton({ label, onPress, disabled, icon, style, contentStyle }: PrimaryProps) {
   const press = usePressAnimation({ scaleTo: 0.96, haptic: 'medium' });
   const enabled = useSharedValue(disabled ? 0 : 1);
 
@@ -48,9 +51,13 @@ export function PrimaryButton({ label, onPress, disabled, icon, style }: Primary
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
       accessibilityLabel={label}
+      /* Layout styles have to land on the element its parent lays out. Putting
+         them on the inner animated view meant flexGrow and width were ignored,
+         so buttons in a row never filled the row. */
+      style={style}
       {...(disabled ? {} : press.handlers)}
     >
-      <Animated.View style={[styles.glow, glowStyle, press.style, style]}>
+      <Animated.View style={[styles.glow, glowStyle, press.style]}>
         <View style={styles.primary}>
           <View style={styles.disabledFill} />
           <Animated.View style={[StyleSheet.absoluteFill, fillStyle]}>
@@ -60,7 +67,7 @@ export function PrimaryButton({ label, onPress, disabled, icon, style }: Primary
               style={StyleSheet.absoluteFill}
             />
           </Animated.View>
-          <View style={styles.primaryContent}>
+          <View style={[styles.primaryContent, contentStyle]}>
             <Text style={[styles.primaryText, disabled && styles.primaryTextDisabled]}>
               {label}
             </Text>
@@ -77,26 +84,28 @@ type SecondaryProps = {
   onPress?: () => void;
   icon?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 /** §3.5 — Secondary button: glass pill, navy 15/600 text, optional leading icon. */
-export function SecondaryButton({ label, onPress, icon, style }: SecondaryProps) {
+export function SecondaryButton({ label, onPress, icon, style, contentStyle }: SecondaryProps) {
   const press = usePressAnimation({ scaleTo: 0.97, dimTo: 0.92, haptic: 'light' });
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
+      style={style}
       {...press.handlers}
     >
-      <Animated.View style={[styles.secondaryShadow, press.style, style]}>
+      <Animated.View style={[styles.secondaryShadow, press.style]}>
         <View style={[styles.secondaryClip, { backgroundColor: glass.fill }]}>
           <LinearGradient
             colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          <View style={styles.secondaryInner}>
+          <View style={[styles.secondaryInner, contentStyle]}>
             {icon ? <View style={styles.icon}>{icon}</View> : null}
             <Text style={styles.secondaryText}>{label}</Text>
           </View>
