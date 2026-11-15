@@ -52,6 +52,10 @@ export function RunCard({ run, onJoin, myDestinationId, compact, showDay }: Prop
         <Text style={styles.price}>{money(run.feeCents)}</Text>
       </View>
       <View style={[styles.row, { marginTop: 12 }]}>
+        {/* Indent to the avatar's trailing edge so the meta row lines up with
+            the name above it. Hardcoding 57 was wrong for compact cards,
+            whose avatar is 38 rather than 44. */}
+        <View style={{ width: (compact ? 38 : 44) + 13 }} />
         <View style={styles.meta}>
           <View style={styles.metaItem}>
             <Clock size={14} color={colors.muted} strokeWidth={1.8} />
@@ -72,7 +76,7 @@ export function RunCard({ run, onJoin, myDestinationId, compact, showDay }: Prop
             label={full ? 'Full' : 'Join'}
             disabled={full}
             onPress={() => onJoin(run)}
-            style={styles.join}
+            contentStyle={styles.joinInner}
           />
         ) : null}
       </View>
@@ -90,8 +94,8 @@ const styles = StyleSheet.create({
   mine: { color: colors.navy, textDecorationLine: 'underline' },
   line: { width: 28, height: 1.5, backgroundColor: 'rgba(18,53,91,0.25)', flexShrink: 0 },
   price: { fontSize: 20, color: colors.navy, fontFamily: fonts.bold, letterSpacing: -0.5 },
-  meta: { flexDirection: 'row', gap: 16, flex: 1, marginLeft: 57 },
+  meta: { flexDirection: 'row', gap: 16, flex: 1 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   metaText: { fontSize: 13, color: colors.muted, fontFamily: fonts.regular },
-  join: { paddingVertical: 9, paddingHorizontal: 20 },
+  joinInner: { paddingVertical: 9, paddingHorizontal: 20 },
 });

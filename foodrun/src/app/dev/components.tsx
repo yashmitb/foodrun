@@ -141,7 +141,7 @@ export default function ComponentsGallery() {
                 <PrimaryButton
                   label="Join"
                   onPress={() => toast.show({ message: 'Join tapped.' })}
-                  style={styles.joinPill}
+                  contentStyle={styles.joinPill}
                 />
               </View>
             </GlassCard>

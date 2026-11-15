@@ -247,7 +247,11 @@ export default function Find() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: layout.screenMargin, paddingTop: 12 },
+  wrap: {
+    paddingHorizontal: layout.screenMargin,
+    paddingTop: 12,
+    paddingBottom: layout.tabBarClearance,
+  },
   destChip: { paddingVertical: 8, paddingHorizontal: 14 },
   destChipText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.navy },
   destList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },

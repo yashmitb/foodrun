@@ -130,7 +130,11 @@ export default function Account() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: layout.screenMargin, paddingTop: 12 },
+  wrap: {
+    paddingHorizontal: layout.screenMargin,
+    paddingTop: 12,
+    paddingBottom: layout.tabBarClearance,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontSize: 19, fontFamily: fonts.bold, color: colors.ink },

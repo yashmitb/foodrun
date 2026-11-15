@@ -158,6 +158,12 @@ export const layout = {
   screenMargin: 20,
   tabBarSide: 14,
   tabBarBottom: 18,
+  /**
+   * The tab bar floats over the scene, so every tab screen has to end this
+   * far above its own bottom edge or the last card sits underneath it.
+   * Icon-only bar height (~62) + the gap it keeps from the bottom + air.
+   */
+  tabBarClearance: 92,
 } as const;
 
 /** Motion (§3.6). Respect Reduce Motion (cross-fade only). */

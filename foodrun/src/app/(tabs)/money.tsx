@@ -87,7 +87,11 @@ export default function Money() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: layout.screenMargin, paddingTop: 12 },
+  wrap: {
+    paddingHorizontal: layout.screenMargin,
+    paddingTop: 12,
+    paddingBottom: layout.tabBarClearance,
+  },
   label: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.faint, letterSpacing: 0.5 },
   big: {
     fontSize: 48,

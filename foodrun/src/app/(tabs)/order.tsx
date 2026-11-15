@@ -328,7 +328,11 @@ export default function MyOrder() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: layout.screenMargin, paddingTop: 12 },
+  wrap: {
+    paddingHorizontal: layout.screenMargin,
+    paddingTop: 12,
+    paddingBottom: layout.tabBarClearance,
+  },
   screenTitle: {
     textAlign: 'center',
     fontSize: 17,

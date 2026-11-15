@@ -225,7 +225,11 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: layout.screenMargin, paddingTop: 12 },
+  wrap: {
+    paddingHorizontal: layout.screenMargin,
+    paddingTop: 12,
+    paddingBottom: layout.tabBarClearance,
+  },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 6 },
   pillInner: {
     flexDirection: 'row',
