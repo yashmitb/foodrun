@@ -14,12 +14,18 @@ import { AppBackground } from '@/components/AppBackground';
 import { PrimaryButton } from '@/components/buttons';
 import { DigitBoxes } from '@/components/DigitBoxes';
 import { GlassCard } from '@/components/GlassCard';
+import * as auth from '@/data/auth';
 import { useStore } from '@/data/store';
 import { colors, fonts, layout, type } from '@/theme';
 
 /**
- * §2 — only @ucsd.edu emails. Mock OTP for now (any 4 digits work);
- * swaps for Supabase email OTP in Phase 3 with the same two steps.
+ * §2 — only @ucsd.edu emails, by one-time code.
+ *
+ * The two steps are the same whether the code came from Supabase or from the
+ * demo stub; `@/data/auth` decides which, based on whether a project is
+ * configured. The only thing the screen changes is how many digits it asks
+ * for and what it tells the user, because a grader typing 1234 deserves to
+ * know why it worked.
  */
 export default function Auth() {
   const signIn = useStore((s) => s.signIn);
@@ -27,22 +33,40 @@ export default function Auth() {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const len = auth.codeLength;
 
-  const emailOk = /^[^@\s]+@ucsd\.edu$/i.test(email.trim());
+  const emailOk = auth.isUcsdEmail(email);
 
-  const sendCode = () => {
+  const sendCode = async () => {
     if (!emailOk) {
       // Return on an empty field is not a mistake worth naming; the button
       // already says what is needed.
       setError(email.trim() ? 'Use your @ucsd.edu email.' : null);
       return;
     }
+    setBusy(true);
+    const result = await auth.sendCode(email);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
     setError(null);
+    setCode('');
     setStep('code');
   };
 
-  const verify = () => {
-    if (code.length !== 4) return;
+  const verify = async () => {
+    if (code.length !== len) return;
+    setBusy(true);
+    const result = await auth.verifyCode(email, code);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      setCode('');
+      return;
+    }
     signIn(email.trim().toLowerCase());
     router.replace('/onboarding');
   };
@@ -78,8 +102,8 @@ export default function Auth() {
                 />
                 {error ? <Text style={styles.error}>{error}</Text> : null}
                 <PrimaryButton
-                  label={emailOk ? 'Send code' : 'Use your UCSD email'}
-                  disabled={!emailOk}
+                  label={busy ? 'Sending…' : emailOk ? 'Send code' : 'Use your UCSD email'}
+                  disabled={!emailOk || busy}
                   onPress={sendCode}
                   style={{ marginTop: 16 }}
                 />
@@ -88,12 +112,23 @@ export default function Auth() {
               <>
                 <Text style={styles.label}>CODE SENT TO {email.toUpperCase()}</Text>
                 <View style={{ marginTop: 10 }}>
-                  <DigitBoxes value={code} onChange={setCode} showPaste={false} />
+                  <DigitBoxes value={code} onChange={setCode} length={len} showPaste={false} />
                 </View>
-                <Text style={styles.hint}>Demo build: any 4 digits work.</Text>
+                <Text style={styles.hint}>
+                  {auth.authMode === 'demo'
+                    ? 'Demo build: any 4 digits work.'
+                    : `We emailed a ${len}-digit code. It expires in an hour.`}
+                </Text>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
                 <PrimaryButton
-                  label={code.length === 4 ? 'Sign in' : 'Enter the 4-digit code'}
-                  disabled={code.length !== 4}
+                  label={
+                    busy
+                      ? 'Checking…'
+                      : code.length === len
+                        ? 'Sign in'
+                        : `Enter the ${len}-digit code`
+                  }
+                  disabled={code.length !== len || busy}
                   onPress={verify}
                   style={{ marginTop: 16 }}
                 />

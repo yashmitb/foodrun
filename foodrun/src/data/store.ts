@@ -238,7 +238,11 @@ export const useStore = create<State>((set, get) => ({
       runs: seedRuns(destinationId),
     });
   },
-  setDestination: (id) => set({ destinationId: id }),
+  setDestination: (id) =>
+    // Re-seed: the runs list is "runs to where you are", so changing where
+    // you are changes the list. Restoring a saved destination on launch goes
+    // through here for the same reason.
+    set({ destinationId: id, runs: seedRuns(id) }),
   setDropSpot: (spot) =>
     set((s) => ({
       dropSpot: spot,

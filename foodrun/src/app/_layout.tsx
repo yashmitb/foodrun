@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ToastProvider } from '@/components/Toast';
+import { usePersistedSession } from '@/data/persist';
 import { useAppClock } from '@/lib/useAppClock';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +23,11 @@ function AppClock() {
 }
 
 export default function RootLayout() {
+  /**
+   * At the root, not on the entry route: the saved session has to be in place
+   * before *any* screen renders, including a deep link straight to /order.
+   */
+  const sessionReady = usePersistedSession();
   const [loaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -29,11 +35,13 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
-  useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
-  }, [loaded]);
+  const ready = loaded && sessionReady;
 
-  if (!loaded) return null;
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync();
+  }, [ready]);
+
+  if (!ready) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
