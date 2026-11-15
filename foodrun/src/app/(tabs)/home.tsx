@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { ArrowRight, MapPin, Plus } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedNumber } from '@/components/AnimatedNumber';
@@ -14,7 +14,7 @@ import { RunCard } from '@/components/RunCard';
 import { destinationById, hallById } from '@/data/dining';
 import { useStore } from '@/data/store';
 import { dayName, greeting } from '@/lib/format';
-import { stagger } from '@/lib/motion';
+import { LAYOUT, enterUp, stagger } from '@/lib/motion';
 import { useNow } from '@/lib/useAppClock';
 import { colors, fonts, layout, radius, type } from '@/theme';
 
@@ -65,7 +65,7 @@ export default function Home() {
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
           {/* Block 1: greeting */}
-          <Animated.View entering={FadeInDown.duration(420).delay(stagger(0))} style={styles.top}>
+          <Animated.View entering={enterUp(stagger(0))} style={styles.top}>
             <View>
               <Text style={[type.eyebrow as object, { fontFamily: fonts.semiBold }]}>
                 {dayName()}
@@ -80,7 +80,7 @@ export default function Home() {
             </Pressable>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(420).delay(stagger(1))}>
+          <Animated.View entering={enterUp(stagger(1))}>
           <Pressable onPress={() => router.push('/onboarding')} accessibilityLabel="Change location">
             <GlassCard radius={radius.pill} padding={0} style={{ alignSelf: 'flex-start', marginTop: 14 }}>
               <View style={styles.pillInner}>
@@ -92,7 +92,7 @@ export default function Home() {
           </Animated.View>
 
           {/* Block 2: hero */}
-          <Animated.View entering={FadeInDown.duration(420).delay(stagger(2))}>
+          <Animated.View entering={enterUp(stagger(2))}>
           <GlassCard style={{ marginTop: 16 }}>
             <Text style={[type.cardHeadline as object, { fontFamily: fonts.bold }]}>
               Hungry? Food is{'\n'}already headed your way.
@@ -110,7 +110,7 @@ export default function Home() {
           </GlassCard>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(420).delay(stagger(3))}>
+          <Animated.View entering={enterUp(stagger(3))}>
             <SecondaryButton
               label={myRun ? 'Your active run' : 'Post a run and earn'}
               icon={<Plus size={17} color={colors.navy} strokeWidth={2} />}
@@ -121,7 +121,7 @@ export default function Home() {
 
           {/* Block 3: active order */}
           {myOrder ? (
-            <Animated.View entering={FadeInDown.duration(380)} layout={LinearTransition}>
+            <Animated.View entering={enterUp()} layout={LAYOUT}>
               <Text style={styles.sectionLabel}>ACTIVE ORDER</Text>
               <GlassCard
                 padding={18}
@@ -153,7 +153,7 @@ export default function Home() {
                 <View style={styles.track}>
                   <Animated.View
                     style={[styles.trackFill, { width: `${progress}%` }]}
-                    layout={LinearTransition.springify().damping(20).stiffness(180)}
+                    layout={LAYOUT}
                   />
                 </View>
               </GlassCard>
@@ -173,7 +173,7 @@ export default function Home() {
                 {heading.slice(0, 3).map((r, i) => (
                   <Animated.View
                     key={r.id}
-                    entering={FadeInDown.duration(380).delay(stagger(i + 4))}
+                    entering={enterUp(stagger(i + 4))}
                     style={{ width: 300 }}
                   >
                     <RunCard

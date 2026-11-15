@@ -16,11 +16,16 @@ import Animated, {
 import { destinationById } from '@/data/dining';
 import { useJoinDraft } from '@/data/joinDraft';
 import { useStore } from '@/data/store';
-import { SPRING_BOUNCY, haptic } from '@/lib/motion';
+import { BOUNCY, haptic } from '@/lib/motion';
 import { colors, fonts, motion } from '@/theme';
 
 /** How long to look before offering a way out. */
 const NO_STICKER_AFTER_MS = 7000;
+
+/** Viewfinder is a fixed 240pt square; the line sweeps between these insets. */
+const VIEWFINDER = 240;
+const SWEEP_TOP = VIEWFINDER * 0.08;
+const SWEEP_TRAVEL = VIEWFINDER * 0.82;
 
 /**
  * §6.3 Step 3 — table QR scanner.
@@ -51,7 +56,7 @@ export default function Scan() {
       if (done.current) return;
       done.current = true;
       haptic('success');
-      found.set(withSpring(1, SPRING_BOUNCY));
+      found.set(withSpring(1, BOUNCY));
       patch({ dropSpot: spot });
       // let the frame turn green before the sheet comes back
       setTimeout(() => router.back(), 260);
@@ -79,8 +84,14 @@ export default function Scan() {
     return () => clearTimeout(t);
   }, [sweep]);
 
+  /**
+   * `translateY` over an animated `top`: the sweep runs continuously for as
+   * long as the scanner is open, and a percentage `top` would put a layout
+   * pass on every one of those frames. The viewfinder is a fixed 240pt box,
+   * so the travel can just be a constant.
+   */
   const lineStyle = useAnimatedStyle(() => ({
-    top: `${8 + sweep.get() * 82}%`,
+    transform: [{ translateY: SWEEP_TOP + sweep.get() * SWEEP_TRAVEL }],
     opacity: 1 - found.get(),
   }));
 
@@ -178,8 +189,8 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.white, fontSize: 17, fontFamily: fonts.semiBold },
   viewfinder: {
-    width: 240,
-    height: 240,
+    width: VIEWFINDER,
+    height: VIEWFINDER,
     borderRadius: 30,
     borderWidth: 3,
     overflow: 'hidden',
@@ -200,6 +211,7 @@ const styles = StyleSheet.create({
   qrCellDark: { backgroundColor: '#F2F5F9' },
   scanLine: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     height: 3,

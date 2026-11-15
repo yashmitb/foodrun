@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { COLOR_SHIFT, SPRING_GENTLE } from '@/lib/motion';
+import { COLOR_SHIFT, SMOOTH } from '@/lib/motion';
 import { colors, fonts } from '@/theme';
 
 export const ORDER_STAGES = ['Ordered', 'Picked up', 'On the way', 'Arrived'] as const;
@@ -25,18 +25,23 @@ type SegState = 'done' | 'current' | 'upcoming';
  * Each segment fills left-to-right rather than cross-fading, so the bar reads
  * as the order physically moving along a route — the peer review called this
  * the most important display on the screen.
+ *
+ * The fill is a `scaleX` on a full-width bar, not an animated `width`. A
+ * percentage width re-runs layout for the segment on every frame; a scale is
+ * handled by the compositor and costs nothing. `transformOrigin: 'left'`
+ * is what makes it grow from the left edge rather than from the middle.
  */
 function Segment({ state }: { state: SegState }) {
   const fill = useSharedValue(state === 'upcoming' ? 0 : 1);
   const tone = useSharedValue(state === 'done' ? 1 : 0);
 
   useEffect(() => {
-    fill.set(withSpring(state === 'upcoming' ? 0 : 1, SPRING_GENTLE));
+    fill.set(withSpring(state === 'upcoming' ? 0 : 1, SMOOTH));
     tone.set(withTiming(state === 'done' ? 1 : 0, COLOR_SHIFT));
   }, [state, fill, tone]);
 
   const fillStyle = useAnimatedStyle(() => ({
-    width: `${fill.get() * 100}%`,
+    transform: [{ scaleX: fill.get() }],
     backgroundColor: interpolateColor(tone.get(), [0, 1], [colors.orange, colors.navy]),
   }));
 
@@ -52,7 +57,7 @@ function StepLabel({ label, state }: { label: string; state: SegState }) {
   const done = useSharedValue(state === 'done' ? 1 : 0);
 
   useEffect(() => {
-    t.set(withSpring(state === 'current' ? 1 : 0, SPRING_GENTLE));
+    t.set(withSpring(state === 'current' ? 1 : 0, SMOOTH));
     done.set(withTiming(state === 'done' ? 1 : 0, COLOR_SHIFT));
   }, [state, t, done]);
 
@@ -105,8 +110,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   segmentFill: {
+    width: '100%',
     height: '100%',
     borderRadius: 5,
+    transformOrigin: 'left',
   },
   labelRow: {
     flexDirection: 'row',

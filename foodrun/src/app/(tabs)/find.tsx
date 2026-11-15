@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppBackground } from '@/components/AppBackground';
@@ -19,7 +19,7 @@ import { RunCard } from '@/components/RunCard';
 import { useToast } from '@/components/Toast';
 import { DESTINATIONS, HALLS, destinationById, hallById, isOpenNow } from '@/data/dining';
 import { isActiveOrder, useStore } from '@/data/store';
-import { haptic, stagger } from '@/lib/motion';
+import { LAYOUT, enterUp, haptic, stagger } from '@/lib/motion';
 import { colors, fonts, layout, radius, type } from '@/theme';
 
 /**
@@ -195,8 +195,8 @@ export default function Find() {
           {list.map((r, i) => (
             <Animated.View
               key={r.id}
-              entering={FadeInDown.duration(360).delay(stagger(i))}
-              layout={LinearTransition.springify().damping(20).stiffness(180)}
+              entering={enterUp(stagger(i))}
+              layout={LAYOUT}
               style={{ marginTop: 12 }}
             >
               <RunCard

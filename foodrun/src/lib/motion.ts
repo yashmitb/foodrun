@@ -2,6 +2,8 @@ import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import {
   Easing,
+  FadeInDown,
+  LinearTransition,
   ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
@@ -13,59 +15,77 @@ import {
 } from 'react-native-reanimated';
 
 /**
- * iOS-feeling motion. UIKit animates with springs, not fixed curves — the
- * duration follows from the physics, so a press that's interrupted mid-flight
- * resolves smoothly instead of snapping. These mirror SwiftUI's presets.
+ * Apple's spring model, ported.
  *
- * All configs set `reduceMotion: System`, so Reanimated drops to an instant
- * value when the OS "Reduce Motion" switch is on (§3.6).
+ * Since iOS 17, UIKit and SwiftUI stopped exposing mass/damping/stiffness and
+ * ask for two numbers instead: a *perceptual duration* and a *bounce*
+ * (WWDC23, "Animate with springs"). The physics are derived, so a designer
+ * never hand-tunes a damping coefficient and accidentally lands on something
+ * that wobbles. The conversion, with mass pinned at 1:
+ *
+ *   stiffness = (2π / duration)²
+ *   damping   = 4π · (1 − bounce) / duration        (bounce ≥ 0)
+ *
+ * which gives a damping ratio of exactly (1 − bounce): bounce 0 is critically
+ * damped — fast, no overshoot — and bounce 0.3 overshoots noticeably. Apple's
+ * advice is that 0 is the safe default and 0.15 already reads as lively.
+ *
+ * Why springs at all: a spring is defined by where it is and how fast it is
+ * moving, so a *new* spring can pick up the current velocity and continue.
+ * A duration curve cannot — interrupt it and it either snaps or restarts.
+ * Every animation in this app must survive being interrupted, because every
+ * one of them can be, by a tap or a drag.
+ *
+ * `reduceMotion: System` makes Reanimated jump straight to the end value when
+ * the OS "Reduce Motion" switch is on (§3.6). If animations look dead on a
+ * device, check Settings › Accessibility › Motion first.
  */
+export function spring(duration: number, bounce = 0): WithSpringConfig {
+  const w = (2 * Math.PI) / duration;
+  return {
+    mass: 1,
+    stiffness: w * w,
+    damping: 2 * (1 - bounce) * w,
+    reduceMotion: ReduceMotion.System,
+  };
+}
 
-/** Crisp, no overshoot. Buttons, taps, toggles. */
-export const SPRING_SNAPPY: WithSpringConfig = {
-  mass: 0.6,
-  damping: 18,
-  stiffness: 320,
-  overshootClamping: false,
-  reduceMotion: ReduceMotion.System,
-};
+/** Touch-down highlight. Must land inside one or two frames or it feels laggy. */
+export const PRESS = spring(0.22, 0);
 
-/** Soft settle. Cards, layout shifts, progress. */
-export const SPRING_GENTLE: WithSpringConfig = {
-  mass: 0.9,
-  damping: 20,
-  stiffness: 180,
-  reduceMotion: ReduceMotion.System,
-};
+/** SwiftUI `.snappy` at control scale. Tab capsules, segmented controls, chips. */
+export const SNAPPY = spring(0.32, 0.12);
 
-/** A little life. Sheets, hero entrances. */
-export const SPRING_BOUNCY: WithSpringConfig = {
-  mass: 0.8,
-  damping: 15,
-  stiffness: 200,
-  reduceMotion: ReduceMotion.System,
-};
+/** SwiftUI `.smooth`. Cards, layout shifts, progress. No overshoot. */
+export const SMOOTH = spring(0.45, 0);
 
-/** Sheet present / dismiss — matches the iOS sheet feel. */
-export const SPRING_SHEET: WithSpringConfig = {
-  mass: 0.85,
-  damping: 22,
-  stiffness: 260,
-  reduceMotion: ReduceMotion.System,
-};
+/** Sheet present/dismiss. Matches the weight of a UIKit sheet. */
+export const SHEET = spring(0.5, 0.1);
 
-/** For opacity and color, where a spring would look wrong. */
+/** SwiftUI `.bouncy`. Hero entrances only — never on exits. */
+export const BOUNCY = spring(0.5, 0.3);
+
+/**
+ * Opacity and color get curves, not springs: a spring on opacity can overshoot
+ * past 1, which clips, and colour has no velocity to preserve.
+ */
 export const FADE: WithTimingConfig = {
-  duration: 220,
+  duration: 200,
   easing: Easing.out(Easing.quad),
   reduceMotion: ReduceMotion.System,
 };
 
 export const COLOR_SHIFT: WithTimingConfig = {
-  duration: 420,
+  duration: 350,
   easing: Easing.inOut(Easing.quad),
   reduceMotion: ReduceMotion.System,
 };
+
+/** Kept so existing imports keep working. */
+export const SPRING_SNAPPY = SNAPPY;
+export const SPRING_GENTLE = SMOOTH;
+export const SPRING_BOUNCY = BOUNCY;
+export const SPRING_SHEET = SHEET;
 
 export type HapticKind = 'light' | 'medium' | 'select' | 'success' | 'warning' | 'error';
 
@@ -101,8 +121,13 @@ type PressOptions = {
 
 /**
  * Spring press feedback. Spread the handlers onto a Pressable and the style
- * onto an Animated.View inside it. Because it springs, a quick tap still
- * reads: the scale is already travelling back before the finger lifts.
+ * onto an Animated.View inside it.
+ *
+ * Only `transform` and `opacity` are touched. Those two are the compositor's
+ * own properties — iOS can animate them without re-running layout or redrawing
+ * the view's contents, which is what lets them hold 120Hz. Animating `width`,
+ * `top` or `margin` instead walks the layout tree every frame; that is the
+ * difference between smooth and almost smooth.
  */
 export function usePressAnimation({
   scaleTo = 0.96,
@@ -120,21 +145,48 @@ export function usePressAnimation({
     style,
     handlers: {
       onPressIn: () => {
-        pressed.set(withSpring(1, SPRING_SNAPPY));
+        pressed.set(withSpring(1, PRESS));
         if (hapticKind) haptic(hapticKind);
       },
       onPressOut: () => {
-        pressed.set(withSpring(0, SPRING_SNAPPY));
+        pressed.set(withSpring(0, PRESS));
       },
     },
   };
 }
 
 /**
+ * Entrance for a card or row: rises a short distance into place on a spring.
+ *
+ * Springified rather than a 420ms curve, for the same reason as everything
+ * else here — a list can re-render while its rows are still arriving, and a
+ * curve restarts from zero when that happens.
+ */
+export function enterUp(delay = 0) {
+  return FadeInDown.delay(delay)
+    .springify()
+    .mass(1)
+    .stiffness(158)
+    .damping(22.6)
+    .reduceMotion(ReduceMotion.System);
+}
+
+/**
+ * Layout spring for lists that grow, shrink or reorder. Reanimated animates
+ * the real layout change here, so this is the one place a non-transform
+ * animation is unavoidable — keep it to lists, never to a continuous loop.
+ */
+export const LAYOUT = LinearTransition.springify()
+  .mass(1)
+  .stiffness(195)
+  .damping(27.9)
+  .reduceMotion(ReduceMotion.System);
+
+/**
  * Stagger delay for list entrances. Capped so a long list never feels like
  * it's loading slowly — Apple fronts the first few and lands the rest together.
  */
-export function stagger(index: number, step = 45, max = 260): number {
+export function stagger(index: number, step = 40, max = 200): number {
   return Math.min(index * step, max);
 }
 

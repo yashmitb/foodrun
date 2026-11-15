@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { ChevronLeft, MapPin } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppBackground } from '@/components/AppBackground';
@@ -13,7 +13,7 @@ import { useToast } from '@/components/Toast';
 import { destinationById, hallById } from '@/data/dining';
 import { useStore } from '@/data/store';
 import { clockTime, countdown, money } from '@/lib/format';
-import { haptic, stagger } from '@/lib/motion';
+import { LAYOUT, enterUp, haptic, stagger } from '@/lib/motion';
 import { useNow } from '@/lib/useAppClock';
 import { colors, fonts, layout, type } from '@/theme';
 
@@ -88,8 +88,8 @@ export default function ActiveRun() {
             return (
               <Animated.View
                 key={o.id}
-                entering={FadeInDown.duration(360).delay(stagger(idx))}
-                layout={LinearTransition.springify().damping(20).stiffness(180)}
+                entering={enterUp(stagger(idx))}
+                layout={LAYOUT}
                 style={{ marginTop: 12, opacity: pending ? 0.6 : 1 }}
               >
               <GlassCard padding={16}>

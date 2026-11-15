@@ -2,25 +2,25 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { HelpCircle, QrCode, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
+  useAnimatedKeyboard,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 
 import { Avatar } from '@/components/Avatar';
 import { PrimaryButton } from '@/components/buttons';
@@ -73,6 +73,33 @@ export default function JoinSheet() {
   const translateY = useSharedValue(900);
   const dragging = useSharedValue(0);
 
+  /**
+   * The keyboard is tracked as a shared value, so the sheet rides it on the UI
+   * thread and the two move as one surface. `KeyboardAvoidingView` cannot do
+   * that here: it is bottom-anchored inside `justifyContent: 'flex-end'`, so
+   * `behavior="padding"` grew the sheet by the keyboard's height instead of
+   * lifting it, pushing the header and close button off the top of the screen.
+   *
+   * `useAnimatedKeyboard` is deprecated in favour of react-native-keyboard-
+   * controller, which needs native code and therefore a dev build — this has
+   * to keep working in Expo Go, so it stays for now.
+   */
+  const keyboard = useAnimatedKeyboard();
+  const { height: winH } = useWindowDimensions();
+  const [kbUp, setKbUp] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', () => setKbUp(true));
+    const hide = Keyboard.addListener('keyboardWillHide', () => setKbUp(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  // Leave room for the keyboard rather than growing past the top of the screen.
+  const maxSheetBody = kbUp ? Math.round(winH * 0.42) : Math.min(640, Math.round(winH * 0.78));
+
   useEffect(() => {
     translateY.set(withSpring(0, SPRING_SHEET));
   }, [translateY]);
@@ -92,6 +119,11 @@ export default function JoinSheet() {
   const pan = React.useMemo(
     () =>
       Gesture.Pan()
+        // Only a deliberate downward drag counts, and only from the handle —
+        // a Pan across the whole sheet swallowed taps on the digit boxes and
+        // made the list unscrollable, because it won the touch every time.
+        .activeOffsetY(10)
+        .failOffsetY(-24)
         .onStart(() => {
           dragging.set(1);
         })
@@ -116,7 +148,7 @@ export default function JoinSheet() {
   );
 
   const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.get() }],
+    transform: [{ translateY: translateY.get() - keyboard.height.get() }],
   }));
 
   // Scrim tracks the drag, so pulling down reveals the list behind it.
@@ -176,17 +208,20 @@ export default function JoinSheet() {
       <Animated.View style={[styles.scrim, scrimStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
       </Animated.View>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.sheetWrap, sheetStyle]}>
-          <BlurView intensity={glass.sheetBlurIntensity} tint="light" style={styles.sheetBlur}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-                showsVerticalScrollIndicator={false}
-                style={{ maxHeight: 640 }}
-              >
+      <Animated.View style={[styles.sheetWrap, sheetStyle]}>
+        <View style={styles.sheetBlur}>
+          <GestureDetector gesture={pan}>
+            <View style={styles.grabArea}>
               <View style={styles.grab} />
+            </View>
+          </GestureDetector>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+            showsVerticalScrollIndicator={false}
+            style={{ maxHeight: maxSheetBody }}
+          >
               <View style={styles.header}>
                 <Avatar initials={run.runner.initials} />
                 <View style={{ flex: 1 }}>
@@ -380,11 +415,9 @@ export default function JoinSheet() {
                   </Pressable>
                 </>
               )}
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </BlurView>
-        </Animated.View>
-      </GestureDetector>
+          </ScrollView>
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -404,14 +437,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     overflow: 'hidden',
   },
-  sheetBlur: { backgroundColor: glass.sheetFill, paddingHorizontal: 20, paddingTop: 10 },
+  sheetBlur: { backgroundColor: glass.sheetFill, paddingHorizontal: 20 },
+  grabArea: { paddingTop: 10, paddingBottom: 14, alignItems: 'center' },
   grab: {
     width: 38,
     height: 5,
     borderRadius: 5,
     backgroundColor: 'rgba(18,53,91,0.2)',
-    alignSelf: 'center',
-    marginBottom: 14,
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 13 },
   title: { fontSize: 17, fontFamily: fonts.semiBold, color: colors.ink },

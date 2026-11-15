@@ -40,11 +40,19 @@ export default function RootLayout() {
       <ToastProvider>
         <AppClock />
         <StatusBar style="dark" />
+        {/*
+          `animation: 'default'` hands pushes back to UINavigationController.
+          This was `slide_from_right` with a fixed 300ms duration, which is a
+          re-implementation of the iOS push — and a worse one: the real thing
+          is driven by the swipe-back gesture, tracks the finger 1:1, parallaxes
+          the outgoing screen at a different rate, dims it, and can be released
+          or reversed mid-flight. Nothing authored in JS gets that for free, and
+          a screen transition is the largest piece of motion in the app.
+        */}
         <Stack
           screenOptions={{
             headerShown: false,
-            animation: 'slide_from_right',
-            animationDuration: 300,
+            animation: 'default',
             gestureEnabled: true,
             contentStyle: { backgroundColor: '#F4F7FB' },
           }}

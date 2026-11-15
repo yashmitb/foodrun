@@ -2,12 +2,7 @@ import { router } from 'expo-router';
 import { MapPin, MessageSquare, Star } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  LinearTransition,
-  SlideInDown,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AnimatedNumber } from '@/components/AnimatedNumber';
@@ -22,7 +17,7 @@ import { hallById } from '@/data/dining';
 import { useStore } from '@/data/store';
 import type { ReportReason } from '@/data/types';
 import { clockTime, countdown, updatedLabel } from '@/lib/format';
-import { haptic, stagger } from '@/lib/motion';
+import { LAYOUT, enterUp, haptic, stagger } from '@/lib/motion';
 import { useNow } from '@/lib/useAppClock';
 import { colors, fonts, layout, radius, type } from '@/theme';
 
@@ -135,18 +130,18 @@ export default function MyOrder() {
             ) : null}
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(380).delay(80)} style={{ marginTop: 22 }}>
+          <Animated.View entering={enterUp(80)} style={{ marginTop: 22 }}>
             <ProgressSteps current={stage} />
           </Animated.View>
 
           {/* Timeline (P2) */}
           {order.events.length > 0 ? (
-            <Animated.View style={styles.timeline} layout={LinearTransition}>
+            <Animated.View style={styles.timeline} layout={LAYOUT}>
               {order.events.map((e, i) => (
                 <Animated.View
                   key={e.id}
-                  entering={FadeInDown.duration(320).delay(stagger(i, 35, 160))}
-                  layout={LinearTransition}
+                  entering={enterUp(stagger(i, 35, 160))}
+                  layout={LAYOUT}
                   style={styles.timelineRow}
                 >
                   <Text style={styles.timelineTime}>{clockTime(e.at)}</Text>

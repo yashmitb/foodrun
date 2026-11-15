@@ -17,7 +17,24 @@ export default function TabsLayout() {
   if (!signedIn) return <Redirect href="/auth" />;
   return (
     <Tabs
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: 'transparent' } }}
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: 'transparent' },
+        /*
+          Tab switching was a hard cut: bottom tabs default to
+          `animation: 'none'`. 'shift' slides the incoming scene a short
+          distance in the direction of travel, which is what tells you the
+          tabs are laid out side by side rather than stacked. On a spring, so
+          it can be interrupted by another tab press mid-transition.
+        */
+        animation: 'shift',
+        transitionSpec: {
+          animation: 'spring',
+          config: { mass: 1, stiffness: 157.9, damping: 22.1 },
+        },
+        /* Don't let a backgrounded tab keep its clock and animations running. */
+        freezeOnBlur: true,
+      }}
       tabBar={({ state }) => {
         const active = ROUTE_TO_KEY[state.routes[state.index]?.name] ?? 'home';
         return <TabBar active={active} onChange={(key) => router.navigate(`/${key}`)} />;

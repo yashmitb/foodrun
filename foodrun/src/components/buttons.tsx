@@ -1,4 +1,3 @@
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
@@ -8,7 +7,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-import { SPRING_GENTLE, usePressAnimation } from '@/lib/motion';
+import { SMOOTH, usePressAnimation } from '@/lib/motion';
 import { colors, fonts, glass, radius } from '@/theme';
 
 type PrimaryProps = {
@@ -34,7 +33,7 @@ export function PrimaryButton({ label, onPress, disabled, icon, style }: Primary
   const enabled = useSharedValue(disabled ? 0 : 1);
 
   useEffect(() => {
-    enabled.set(withSpring(disabled ? 0 : 1, SPRING_GENTLE));
+    enabled.set(withSpring(disabled ? 0 : 1, SMOOTH));
   }, [disabled, enabled]);
 
   const fillStyle = useAnimatedStyle(() => ({ opacity: enabled.get() }));
@@ -91,9 +90,7 @@ export function SecondaryButton({ label, onPress, icon, style }: SecondaryProps)
       {...press.handlers}
     >
       <Animated.View style={[styles.secondaryShadow, press.style, style]}>
-        <View style={styles.secondaryClip}>
-          <BlurView intensity={glass.blurIntensity} tint="light" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: glass.fill }]} />
+        <View style={[styles.secondaryClip, { backgroundColor: glass.fill }]}>
           <LinearGradient
             colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
             style={StyleSheet.absoluteFill}

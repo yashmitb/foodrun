@@ -37,26 +37,30 @@ export const backgroundGradient = {
   locations: [0, 0.45, 1] as const,
 };
 
-/** Blurred blobs behind the glass (§3.2). Blur ~60px. */
+/**
+ * Soft blobs behind the glass (§3.2). Drawn as SVG radial gradients, so the
+ * falloff is baked into the fill instead of coming from a live blur pass —
+ * see AppBackground for why that matters.
+ */
 export const blobs = [
-  { color: 'rgba(18,53,91,0.26)', size: 300, top: -80, left: -90 },
-  { color: 'rgba(242,140,40,0.30)', size: 260, top: 300, right: -110 },
-  { color: 'rgba(18,53,91,0.16)', size: 240, bottom: 40, left: -80 },
+  { core: '#12355B', opacity: 0.26, size: 420, cx: '8%', cy: '4%' },
+  { core: '#F28C28', opacity: 0.3, size: 380, cx: '104%', cy: '42%' },
+  { core: '#12355B', opacity: 0.16, size: 360, cx: '-4%', cy: '88%' },
 ] as const;
 
 /** Glass surface (§3.3). */
 export const glass = {
-  fill: 'rgba(255,255,255,0.55)',
+  fill: 'rgba(255,255,255,0.62)',
   blurIntensity: 50, // expo-blur intensity ~40–60, tint "light"
   border: 'rgba(255,255,255,0.78)',
   shadow: {
     shadowColor: '#12355B',
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 30,
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
+    shadowOpacity: 0.1,
     elevation: 4,
   },
-  sheetFill: 'rgba(255,255,255,0.82)',
+  sheetFill: 'rgba(250,252,255,0.97)',
   sheetBlurIntensity: 60,
   toastFill: 'rgba(18,30,45,0.88)',
 } as const;

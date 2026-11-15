@@ -1,4 +1,4 @@
-import { BlurView } from 'expo-blur';
+import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
@@ -6,6 +6,15 @@ import Animated from 'react-native-reanimated';
 
 import { usePressAnimation } from '@/lib/motion';
 import { glass, radius as r } from '@/theme';
+
+/**
+ * iOS 26 exposes Apple's real Liquid Glass through `UIVisualEffectView`, and
+ * expo-glass-effect ships inside Expo Go, so no dev build is needed. It is not
+ * a nicer blur: it refracts what is behind it and lights its own edges, which
+ * is the part a hand-rolled stack can never fake. Checked once at module load
+ * because the answer cannot change while the app is running.
+ */
+const LIQUID = isLiquidGlassAvailable() && isGlassEffectAPIAvailable();
 
 type Props = {
   children: React.ReactNode;
@@ -21,10 +30,11 @@ type Props = {
 /**
  * §3.3 — Glass surface.
  *
- * Real iOS glass is three layers, not one translucent fill: the blur, a
- * top-down sheen that fades out by ~55%, and a bright hairline along the top
- * edge where light catches. Dropping any one of them reads as "gray box with
- * blur". The shadow sits on an outer view because the blur clips its children.
+ * The fallback path (iOS 25 and below, Android, web) deliberately has no
+ * `BlurView`. A blur only earns its cost when there is detail behind it to
+ * smear; behind these cards is a smooth gradient, so a translucent fill plus
+ * a specular sheen is visually indistinguishable and free. One blur per card
+ * was the main reason scrolling dropped frames.
  */
 export function GlassCard({
   children,
@@ -36,11 +46,13 @@ export function GlassCard({
 }: Props) {
   const press = usePressAnimation({ scaleTo: 0.985, dimTo: 0.97, haptic: 'light' });
 
-  const surface = (
-    <View style={[styles.blurClip, { borderRadius: radius }]}>
-      <BlurView intensity={glass.blurIntensity} tint="light" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: glass.fill }]} />
-      {/* specular sheen */}
+  const surface = LIQUID ? (
+    <GlassView glassEffectStyle="regular" style={[styles.clip, { borderRadius: radius }]}>
+      <View style={{ padding }}>{children}</View>
+    </GlassView>
+  ) : (
+    <View style={[styles.clip, { borderRadius: radius, backgroundColor: glass.fill }]}>
+      {/* specular sheen: light falls off by ~55% of the height */}
       <LinearGradient
         colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']}
         locations={[0, 0.55, 1]}
@@ -48,7 +60,9 @@ export function GlassCard({
         pointerEvents="none"
       />
       {/* hairline where light catches the top edge */}
-      <View style={[styles.topEdge, { borderTopLeftRadius: radius, borderTopRightRadius: radius }]} />
+      <View
+        style={[styles.topEdge, { borderTopLeftRadius: radius, borderTopRightRadius: radius }]}
+      />
       <View style={[styles.border, { borderRadius: radius }]} pointerEvents="none" />
       <View style={{ padding }}>{children}</View>
     </View>
@@ -73,15 +87,14 @@ export function GlassCard({
 }
 
 const styles = StyleSheet.create({
-  shadow: {
-    shadowColor: '#12355B',
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 30,
-    shadowOpacity: 0.08,
-    elevation: 4,
-    backgroundColor: 'transparent',
-  },
-  blurClip: {
+  /**
+   * The shadow sits on an outer view because the clip below hides its own
+   * overflow. A tight radius on purpose: a 30pt shadow on a view iOS cannot
+   * derive a `shadowPath` for is recomputed from the alpha channel on every
+   * frame the view is animated, which made the press scale stutter.
+   */
+  shadow: glass.shadow,
+  clip: {
     overflow: 'hidden',
   },
   topEdge: {

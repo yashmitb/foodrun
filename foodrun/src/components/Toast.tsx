@@ -1,4 +1,3 @@
-import { BlurView } from 'expo-blur';
 import React, {
   createContext,
   useCallback,
@@ -59,12 +58,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {toast ? (
         <Animated.View
-          entering={SlideInDown.duration(250)}
-          exiting={SlideOutDown.duration(200)}
+          // Springs in, curves out: Apple lets things arrive with some weight
+          // but never makes you wait on a dismissal.
+          entering={SlideInDown.springify().damping(22).stiffness(260).mass(0.9)}
+          exiting={SlideOutDown.duration(180)}
           style={styles.wrap}
           accessibilityRole="alert"
         >
-          <BlurView intensity={40} tint="dark" style={styles.blur}>
+          {/* The fill is already 88% opaque — a blur behind it was invisible
+              work on top of whatever was scrolling underneath. */}
+          <View style={styles.blur}>
             <View style={styles.inner}>
               <Text style={styles.text} numberOfLines={2}>
                 {toast.message}
@@ -81,7 +84,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 </Pressable>
               ) : null}
             </View>
-          </BlurView>
+          </View>
         </Animated.View>
       ) : null}
     </ToastContext.Provider>

@@ -1,4 +1,4 @@
-import { BlurView } from 'expo-blur';
+import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   CircleDollarSign,
@@ -17,8 +17,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { COLOR_SHIFT, SPRING_SNAPPY, haptic } from '@/lib/motion';
+import { COLOR_SHIFT, SNAPPY, haptic } from '@/lib/motion';
 import { colors, fonts, glass, layout } from '@/theme';
+
+/** A floating tab bar is exactly what Apple's own Liquid Glass is for. */
+const LIQUID = isLiquidGlassAvailable() && isGlassEffectAPIAvailable();
 
 export type TabKey = 'home' | 'find' | 'order' | 'money' | 'account';
 
@@ -54,7 +57,7 @@ function Tab({
   const t = useSharedValue(on ? 1 : 0);
 
   useEffect(() => {
-    t.set(withSpring(on ? 1 : 0, SPRING_SNAPPY));
+    t.set(withSpring(on ? 1 : 0, SNAPPY));
   }, [on, t]);
 
   // A small lift + scale on the icon so the selected tab reads even
@@ -98,7 +101,6 @@ export function TabBar({ active, onChange }: Props) {
   const firstPlacement = useRef(true);
 
   const x = useSharedValue(0);
-  const w = useSharedValue(0);
   const appear = useSharedValue(0);
 
   useEffect(() => {
@@ -106,18 +108,21 @@ export function TabBar({ active, onChange }: Props) {
     if (firstPlacement.current) {
       // Don't fly in from x=0 on mount; land it where it belongs.
       x.set(target.x);
-      w.set(target.width);
       appear.set(withTiming(1, COLOR_SHIFT));
       firstPlacement.current = false;
       return;
     }
-    x.set(withSpring(target.x, SPRING_SNAPPY));
-    w.set(withSpring(target.width, SPRING_SNAPPY));
-  }, [target, x, w, appear]);
+    x.set(withSpring(target.x, SNAPPY));
+  }, [target, x, appear]);
 
+  /**
+   * Only `translateX` and `opacity` move. The five tabs are all `flex: 1`, so
+   * the capsule's width is constant and animating it only forced a layout
+   * pass every frame. Transform and opacity are the compositor's own
+   * properties — they never touch layout, which is what lets this hold 120Hz.
+   */
   const capsuleStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: x.get() }],
-    width: w.get(),
     opacity: appear.get(),
   }));
 
@@ -126,17 +131,13 @@ export function TabBar({ active, onChange }: Props) {
       style={[styles.wrap, { bottom: layout.tabBarBottom + insets.bottom }]}
       accessibilityRole="tablist"
     >
-      <View style={styles.clip}>
-        <BlurView intensity={glass.blurIntensity} tint="light" style={StyleSheet.absoluteFill} />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: glass.fill }]} />
-        <LinearGradient
-          colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+      <Bar>
         <View style={styles.inner}>
           {hasMeasured ? (
-            <Animated.View style={[styles.capsule, capsuleStyle]} pointerEvents="none" />
+            <Animated.View
+              style={[styles.capsule, { width: target.width }, capsuleStyle]}
+              pointerEvents="none"
+            />
           ) : null}
           {TABS.map(({ key, label, Icon }, i) => (
             <Tab
@@ -159,7 +160,28 @@ export function TabBar({ active, onChange }: Props) {
             />
           ))}
         </View>
-      </View>
+      </Bar>
+    </View>
+  );
+}
+
+/** Native glass where the OS has it, a cheap translucent fill where it doesn't. */
+function Bar({ children }: { children: React.ReactNode }) {
+  if (LIQUID) {
+    return (
+      <GlassView glassEffectStyle="regular" isInteractive style={styles.clip}>
+        {children}
+      </GlassView>
+    );
+  }
+  return (
+    <View style={[styles.clip, { backgroundColor: glass.fill }]}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      {children}
     </View>
   );
 }
@@ -172,9 +194,9 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     zIndex: 5,
     shadowColor: '#12355B',
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 26,
-    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
+    shadowOpacity: 0.14,
     elevation: 8,
   },
   clip: {
