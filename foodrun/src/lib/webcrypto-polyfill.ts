@@ -13,32 +13,75 @@ import * as Crypto from 'expo-crypto';
  * `foodrun://`, schemes any app on the device can also register, which is
  * precisely the interception PKCE exists to defeat.
  *
- * expo-crypto has a real SHA-256, so this hands supabase-js the one method
- * it looks for. Imported for its side effect by `@/lib/supabase`, before any
- * client is constructed.
+ * The first attempt at this only patched an existing `globalThis.crypto`.
+ * Depending on the runtime there may be no such object at all, in which case
+ * nothing happened and PKCE stayed on plain — so this creates the object
+ * when it is missing, and fills in whichever pieces are absent.
+ *
+ * Imported for its side effect by `@/lib/supabase`, before any client is
+ * constructed.
  */
-const existing = (globalThis as { crypto?: Partial<Crypto> }).crypto;
 
-if (existing && typeof existing.subtle === 'undefined') {
-  Object.defineProperty(existing, 'subtle', {
-    configurable: true,
-    value: {
-      async digest(algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> {
-        const name = typeof algorithm === 'string' ? algorithm : algorithm.name;
-        const map: Record<string, Crypto.CryptoDigestAlgorithm> = {
-          'SHA-1': Crypto.CryptoDigestAlgorithm.SHA1,
-          'SHA-256': Crypto.CryptoDigestAlgorithm.SHA256,
-          'SHA-384': Crypto.CryptoDigestAlgorithm.SHA384,
-          'SHA-512': Crypto.CryptoDigestAlgorithm.SHA512,
-        };
-        const picked = map[name.toUpperCase()];
-        if (!picked) throw new Error(`Unsupported digest algorithm: ${name}`);
-        return Crypto.digest(picked, data);
-      },
-    },
-  });
+type SubtleLike = { digest(algorithm: unknown, data: BufferSource): Promise<ArrayBuffer> };
+type CryptoLike = {
+  subtle?: SubtleLike;
+  getRandomValues?: <T extends ArrayBufferView | null>(array: T) => T;
+};
+
+const ALGORITHMS: Record<string, Crypto.CryptoDigestAlgorithm> = {
+  'SHA-1': Crypto.CryptoDigestAlgorithm.SHA1,
+  'SHA-256': Crypto.CryptoDigestAlgorithm.SHA256,
+  'SHA-384': Crypto.CryptoDigestAlgorithm.SHA384,
+  'SHA-512': Crypto.CryptoDigestAlgorithm.SHA512,
+};
+
+const subtle: SubtleLike = {
+  async digest(algorithm: unknown, data: BufferSource): Promise<ArrayBuffer> {
+    const name =
+      typeof algorithm === 'string'
+        ? algorithm
+        : ((algorithm as { name?: string })?.name ?? '');
+    const picked = ALGORITHMS[name.toUpperCase()];
+    if (!picked) throw new Error(`Unsupported digest algorithm: ${name}`);
+    return Crypto.digest(picked, data);
+  },
+};
+
+const target = globalThis as typeof globalThis & { crypto?: CryptoLike };
+
+if (!target.crypto) {
+  Object.defineProperty(target, 'crypto', { configurable: true, writable: true, value: {} });
 }
 
-/** True when PKCE can use S256. Read by the sign-in screen in development. */
+const cryptoObj = target.crypto as CryptoLike;
+
+if (typeof cryptoObj.subtle === 'undefined') {
+  try {
+    Object.defineProperty(cryptoObj, 'subtle', { configurable: true, value: subtle });
+  } catch {
+    // Some runtimes hand back a frozen object; replacing it wholesale is the
+    // only way in, and is safe because we copy what was already there.
+    Object.defineProperty(target, 'crypto', {
+      configurable: true,
+      writable: true,
+      value: { ...cryptoObj, subtle },
+    });
+  }
+}
+
+// supabase-js also uses this to build the verifier, and falls back to
+// Math.random without it. Math.random is not a source of secrets.
+const withCrypto = target.crypto as CryptoLike;
+if (typeof withCrypto.getRandomValues === 'undefined') {
+  withCrypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
+    if (!array) return array;
+    const bytes = Crypto.getRandomBytes(array.byteLength);
+    new Uint8Array(array.buffer, array.byteOffset, array.byteLength).set(bytes);
+    return array;
+  }) as CryptoLike['getRandomValues'];
+}
+
+/** True when PKCE can use S256. Shown on the sign-in screen in development. */
 export const webCryptoReady =
-  typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.subtle !== 'undefined';
+  typeof (globalThis as { crypto?: CryptoLike }).crypto?.subtle !== 'undefined' &&
+  typeof TextEncoder !== 'undefined';
