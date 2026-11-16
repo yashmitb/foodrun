@@ -86,6 +86,9 @@ export type Order = {
   rating?: number;
 };
 
+/** An order as its runner sees it: a first name, never a handoff code (§5). */
+export type RunnerOrder = Order & { ordererName: string };
+
 export type ReportReason =
   | 'Runner is late'
   | 'Wrong or missing item'

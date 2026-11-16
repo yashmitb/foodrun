@@ -102,6 +102,15 @@ export type OrderRow = {
   updated_at: string;
 };
 
+/** Name and rating only — an email address is not public (0003). */
+export type PublicProfileRow = {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  rating_avg: number;
+  rating_count: number;
+};
+
 /** The runner's view: no handoff code, no payment id, no orderer id (§5). */
 export type RunnerOrderRow = {
   id: string;
@@ -147,8 +156,51 @@ export type Database = {
     };
     Views: {
       orders_for_runner: Table<RunnerOrderRow>;
+      public_profiles: Table<PublicProfileRow>;
     };
-    Functions: Record<string, never>;
+    /**
+     * The RPCs from 0003_hardening.sql. Writes go through these rather than
+     * through the tables, so these signatures are the whole write surface of
+     * the app and are worth having typed.
+     */
+    Functions: {
+      post_run: {
+        Args: {
+          p_hall_id: string;
+          p_destination_id: string;
+          p_leave_at: string;
+          p_spots: number;
+          p_fee_cents: number;
+        };
+        Returns: RunRow;
+      };
+      join_run: {
+        Args: {
+          p_run_id: string;
+          p_restaurant_id: string | null;
+          p_t2g_last4: string;
+          p_order_name: string | null;
+          p_drop_spot_text: string;
+          p_drop_spot_id?: string | null;
+        };
+        Returns: OrderRow;
+      };
+      cancel_order: { Args: { p_order_id: string }; Returns: OrderRow };
+      runner_set_status: {
+        Args: { p_order_id: string; p_status: OrderStatus };
+        Returns: OrderRow;
+      };
+      runner_deliver: { Args: { p_order_id: string; p_code: string }; Returns: OrderRow };
+      rate_order: {
+        Args: { p_order_id: string; p_stars: number; p_note: string | null };
+        Returns: undefined;
+      };
+      report_order: {
+        Args: { p_order_id: string; p_reason: ReportReason; p_note: string | null };
+        Returns: undefined;
+      };
+      settle_cancel_windows: { Args: Record<string, never>; Returns: undefined };
+    };
     Enums: {
       run_status: RunStatus;
       order_status: OrderStatus;
