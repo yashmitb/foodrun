@@ -58,3 +58,16 @@ select 'A11 right code delivers      : ' ||
         (select id from public.orders limit 1),
         (select handoff_code from public.orders limit 1))) = 'delivered'
   then 'ok' else 'FAIL' end;
+
+-- Added after finding anon could call every function on the live project.
+reset role;
+set role anon;
+select 'A12 anon calls post_run      : ' || pg_temp.blocked(
+  $q$ select public.post_run('pines','geisel', now() + interval '10 min', 3, 200) $q$);
+select 'A13 anon calls handoff gen   : ' || pg_temp.blocked(
+  $q$ select public.new_handoff_code() $q$);
+select 'A14 anon settles windows     : ' || pg_temp.blocked(
+  $q$ select public.settle_cancel_windows() $q$);
+select 'A15 anon reads halls         : ' ||
+  case when (select count(*) from public.halls) = 0 then 'ok' else 'FAIL' end;
+reset role;
