@@ -10,34 +10,52 @@ Google's client id and secret.
 
 ## 1. Google Cloud OAuth client
 
-<https://console.cloud.google.com>
+<https://console.cloud.google.com> → create or pick a project (`foodrun`).
 
-1. **New Project** → name it `FoodRun` → Create, then select it.
-2. **APIs & Services → OAuth consent screen**
-   - User type: **External**. (Internal is only for a Workspace you own.
-     You do not own ucsd.edu.)
-   - App name `FoodRun`, your email for support and developer contact.
-   - Scopes: the defaults are enough. You want `email` and `profile`, which
-     are on already. Do not add more — every extra scope is another thing
-     Google review will ask about later.
-   - Test users: add your own `@ucsd.edu`. While the app is unpublished only
-     listed test users can sign in, which is exactly what you want for now.
-3. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-   - Type: **Web application** (yes, web — the redirect goes to Supabase's
-     servers, not to the phone)
-   - Name: `FoodRun Supabase`
-   - **Authorised redirect URIs**, exactly:
+Google reorganised this in 2025. What used to be one "OAuth consent screen"
+page is now **Google Auth Platform**, split across four items in the left
+sidebar. Older guides, including the first version of this one, send you to
+pages that no longer exist:
 
-     ```
-     https://iqpdazrkcwdrylpvbhgb.supabase.co/auth/v1/callback
-     ```
+| Old name | Where it lives now |
+|---|---|
+| OAuth consent screen → User type, Test users | **Audience** |
+| OAuth consent screen → App name, support email | **Branding** |
+| OAuth consent screen → Scopes | **Data Access** |
+| Credentials → OAuth client ID | **Clients** |
 
-   - Create. Copy the **Client ID** and **Client secret**.
+### Clients → Create OAuth client
 
-A trailing slash or a typo here produces `redirect_uri_mismatch` and nothing
-else. It is the most common failure.
+- Application type: **Web application**. Not iOS — the redirect lands on
+  Supabase's servers, and the phone only sees the result.
+- Name: `FoodRun Supabase`
+- **Authorised redirect URIs**, exactly this and nothing else:
 
----
+  ```
+  https://iqpdazrkcwdrylpvbhgb.supabase.co/auth/v1/callback
+  ```
+
+  A trailing slash, http instead of https, or a mistyped project ref all
+  produce `redirect_uri_mismatch` and no other clue. Paste it; do not type
+  it.
+
+- Create, and copy the **Client ID** and **Client secret**.
+
+### Audience
+
+- **External**. Internal is only for a Workspace you own, and you do not own
+  ucsd.edu.
+- **Test users → Add users**: your own `@ucsd.edu`.
+
+  While the app is unpublished, only listed test users can sign in at all.
+  Miss this and the browser says `Access blocked: app not verified`. The cap
+  is 100 users, which is enough for a first run at a couple of dorms.
+
+### Data Access
+
+`email`, `profile` and `openid` should already be there. Add nothing else.
+Every extra scope is something Google's verification review will ask you to
+justify, and none of them are needed to learn who someone is.
 
 ## 2. Supabase provider
 
@@ -77,7 +95,7 @@ asks which account, and you land back in the app signed in.
 | What you see | What it is |
 |---|---|
 | `redirect_uri_mismatch` | Step 1.3. The URI must match Supabase's callback exactly. |
-| `Access blocked: app not verified` | Add your address under Test users, or publish the consent screen. |
+| `Access blocked: app not verified` | Your address is not under **Audience → Test users**. |
 | Lands back but still signed out | Supabase redirect URLs missing `exp://*`. |
 | "Use your UCSD Google account" | Working. You picked a personal Gmail. |
 | Button absent | `.env` not loaded. Restart with `--clear`. |
