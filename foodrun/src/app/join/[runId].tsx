@@ -28,6 +28,7 @@ import { DigitBoxes } from '@/components/DigitBoxes';
 import { useToast } from '@/components/Toast';
 import { destinationById, hallById } from '@/data/dining';
 import { useJoinDraft } from '@/data/joinDraft';
+import * as backend from '@/data/backend';
 import { useStore } from '@/data/store';
 import { clockTime, money } from '@/lib/format';
 import { SPRING_SHEET, haptic } from '@/lib/motion';
@@ -55,7 +56,6 @@ export default function JoinSheet() {
 
   const me = useStore((s) => s.me);
   const run = useStore((s) => s.runs.find((r) => r.id === runId));
-  const joinRun = useStore((s) => s.joinRun);
   const recentSpots = useStore((s) => s.recentSpots);
 
   const draft = useJoinDraft();
@@ -172,8 +172,8 @@ export default function JoinSheet() {
 
   const close = animateOut;
 
-  const confirm = () => {
-    const result = joinRun({
+  const confirm = async () => {
+    const result = await backend.joinRun({
       runId: run.id,
       restaurant: draft.restaurant!,
       last4: draft.last4,

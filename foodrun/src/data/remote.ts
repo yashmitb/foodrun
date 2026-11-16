@@ -204,6 +204,27 @@ export async function fetchMyRunOrders(runId: string): Promise<RunnerOrder[]> {
   return (data as RunnerOrderRow[]).map(toRunnerOrder);
 }
 
+/**
+ * The id of a station, looked up by the name the sheet shows.
+ *
+ * The chips come from the bundled ucsd_dining.json, and the seed is
+ * generated from that same file, so the names line up. Resolving here rather
+ * than threading ids through the join sheet keeps the screens unaware that a
+ * database exists; if a name ever fails to match, the order still goes
+ * through without a station rather than failing at the last step.
+ */
+export async function fetchRestaurantId(hallId: string, name: string): Promise<string | null> {
+  if (!name) return null;
+  const { data, error } = await requireSupabase()
+    .from('restaurants')
+    .select('id')
+    .eq('hall_id', hallId)
+    .eq('name', name)
+    .limit(1);
+  if (error) return null;
+  return data?.[0]?.id ?? null;
+}
+
 // ------------------------------------------------------------------- writes
 
 export async function postRun(p: {
@@ -273,6 +294,19 @@ export async function rateOrder(orderId: string, stars: number, note?: string): 
   const { error } = await requireSupabase().rpc('rate_order', {
     p_order_id: orderId,
     p_stars: stars,
+    p_note: note ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function reportOrder(
+  orderId: string,
+  reason: 'late' | 'wrong_or_missing' | 'cannot_find_runner' | 'other',
+  note?: string,
+): Promise<void> {
+  const { error } = await requireSupabase().rpc('report_order', {
+    p_order_id: orderId,
+    p_reason: reason,
     p_note: note ?? null,
   });
   if (error) throw new Error(error.message);

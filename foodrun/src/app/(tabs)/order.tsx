@@ -14,6 +14,7 @@ import { GlassCard } from '@/components/GlassCard';
 import { ProgressSteps } from '@/components/ProgressSteps';
 import { useToast } from '@/components/Toast';
 import { hallById } from '@/data/dining';
+import * as backend from '@/data/backend';
 import { useStore } from '@/data/store';
 import type { ReportReason } from '@/data/types';
 import { clockTime, countdown, updatedLabel } from '@/lib/format';
@@ -42,9 +43,6 @@ export default function MyOrder() {
   const toast = useToast();
   const order = useStore((s) => s.myOrder);
   const runs = useStore((s) => s.runs);
-  const cancelMyOrder = useStore((s) => s.cancelMyOrder);
-  const rateRunner = useStore((s) => s.rateRunner);
-  const reportProblem = useStore((s) => s.reportProblem);
   const [reporting, setReporting] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [stars, setStars] = useState(0);
@@ -221,7 +219,7 @@ export default function MyOrder() {
                 disabled={stars === 0}
                 onPress={() => {
                   haptic('success');
-                  rateRunner(stars);
+                  void backend.rateRunner(stars);
                   toast.show({ message: `Thanks! ${runner?.firstName} got your rating.` });
                 }}
                 style={{ marginTop: 16 }}
@@ -247,7 +245,7 @@ export default function MyOrder() {
               onPress={() => {
                 if (canFreeCancel) {
                   haptic('warning');
-                  cancelMyOrder();
+                  void backend.cancelMyOrder();
                   toast.show({ message: 'Order removed. No charge.' });
                 } else {
                   setConfirmCancel(true);
@@ -281,7 +279,7 @@ export default function MyOrder() {
                     key={r}
                     onPress={() => {
                       setReporting(false);
-                      reportProblem(r);
+                      void backend.reportProblem(r);
                       toast.show({ message: `Reported: ${r}. We'll text you within 5 min.` });
                     }}
                     style={styles.actionBtn}
@@ -311,7 +309,7 @@ export default function MyOrder() {
                 <Pressable
                   onPress={() => {
                     setConfirmCancel(false);
-                    cancelMyOrder();
+                    void backend.cancelMyOrder();
                     toast.show({ message: `Cancelled. ${runner?.firstName} was notified.` });
                   }}
                   style={styles.actionBtn}

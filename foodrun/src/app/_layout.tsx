@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ToastProvider } from '@/components/Toast';
+import { useBackendSync } from '@/data/backend';
 import { usePersistedSession } from '@/data/persist';
 import { useAppClock } from '@/lib/useAppClock';
 
@@ -19,6 +20,9 @@ SplashScreen.preventAutoHideAsync();
 
 function AppClock() {
   useAppClock();
+  // Keeps the store in step with the database and subscribes to the
+  // runner's actions (§6.5). A no-op when there is no backend configured.
+  useBackendSync();
   return null;
 }
 

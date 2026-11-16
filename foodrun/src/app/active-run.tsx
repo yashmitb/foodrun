@@ -11,6 +11,7 @@ import { PrimaryButton, SecondaryButton } from '@/components/buttons';
 import { GlassCard } from '@/components/GlassCard';
 import { useToast } from '@/components/Toast';
 import { destinationById, hallById } from '@/data/dining';
+import * as backend from '@/data/backend';
 import { useStore } from '@/data/store';
 import { clockTime, countdown, money } from '@/lib/format';
 import { LAYOUT, enterUp, haptic, stagger } from '@/lib/motion';
@@ -26,10 +27,6 @@ export default function ActiveRun() {
   const toast = useToast();
   const run = useStore((s) => s.myRun);
   const orders = useStore((s) => s.myRunOrders);
-  const markPickedUp = useStore((s) => s.runnerMarkPickedUp);
-  const markNotReady = useStore((s) => s.runnerMarkNotReady);
-  const startDelivering = useStore((s) => s.runnerStartDelivering);
-  const deliver = useStore((s) => s.runnerDeliver);
   const endMyRun = useStore((s) => s.endMyRun);
   const earningsCents = useStore((s) => s.earningsCents);
 
@@ -121,7 +118,7 @@ export default function ActiveRun() {
                       label="Mark picked up"
                       onPress={() => {
                         haptic('success');
-                        markPickedUp(o.id);
+                        void backend.runnerMarkPickedUp(o.id);
                       }}
                       style={styles.smallBtn}
                       contentStyle={styles.smallBtnInner}
@@ -129,7 +126,7 @@ export default function ActiveRun() {
                     <SecondaryButton
                       label="Not ready yet"
                       onPress={() => {
-                        markNotReady(o.id);
+                        void backend.runnerMarkNotReady(o.id);
                         toast.show({ message: `${o.ordererName} can see it's not ready.` });
                       }}
                       style={styles.smallBtn}
@@ -153,11 +150,12 @@ export default function ActiveRun() {
                       <PrimaryButton
                         label="Deliver"
                         disabled={codeInput.length !== 4}
-                        onPress={() => {
-                          const ok = deliver(o.id, codeInput);
-                          haptic(ok ? 'success' : 'error');
+                        onPress={async () => {
+                          const code = codeInput;
                           setCodeInput('');
                           setCodeFor(null);
+                          const ok = await backend.runnerDeliver(o.id, code);
+                          haptic(ok ? 'success' : 'error');
                           toast.show({
                             message: ok
                               ? `Delivered. ${money(o.feeCents)} earned.`
@@ -208,7 +206,7 @@ export default function ActiveRun() {
               label={`Start delivering · ${pickedCount} ${pickedCount === 1 ? 'bag' : 'bags'}`}
               onPress={() => {
                 haptic('success');
-                startDelivering();
+                void backend.runnerStartDelivering();
                 toast.show({ message: 'Orderers can see you on the way.' });
               }}
               style={{ marginTop: 16 }}

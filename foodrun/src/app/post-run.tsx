@@ -8,6 +8,7 @@ import { AppBackground } from '@/components/AppBackground';
 import { PrimaryButton } from '@/components/buttons';
 import { GlassCard } from '@/components/GlassCard';
 import { DESTINATIONS, HALLS, isOpenNow } from '@/data/dining';
+import * as backend from '@/data/backend';
 import { useStore } from '@/data/store';
 import { dayClockTime, money } from '@/lib/format';
 import { colors, fonts, layout, type } from '@/theme';
@@ -32,7 +33,7 @@ function nextEvening(): Date {
 /** §6.6 — Post a Run. Live "You'll earn about $X" (P7). Scheduled runs (P6). */
 export default function PostRun() {
   const destinationId = useStore((s) => s.destinationId);
-  const postRun = useStore((s) => s.postRun);
+  
   const myRun = useStore((s) => s.myRun);
 
   /**
@@ -188,7 +189,13 @@ export default function PostRun() {
               label={hallId ? 'Post run' : 'No dining hall is open'}
               disabled={!hallId}
               onPress={() => {
-                postRun({ hallId, destinationId: destId, leaveAt: leaveAt(), spots, feeCents });
+                void backend.postRun({
+                  hallId,
+                  destinationId: destId,
+                  leaveAt: leaveAt(),
+                  spots,
+                  feeCents,
+                });
                 router.replace('/active-run');
               }}
               style={{ marginTop: 20 }}
