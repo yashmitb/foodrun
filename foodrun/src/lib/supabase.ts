@@ -3,6 +3,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 import type { Database } from '@/data/database.types';
+// Side effect: gives supabase-js a real SHA-256 so PKCE uses S256 rather
+// than silently degrading to plain. Must be imported before the client is
+// constructed below.
+import '@/lib/webcrypto-polyfill';
 
 /**
  * The backend is optional on purpose.

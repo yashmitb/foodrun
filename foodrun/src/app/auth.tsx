@@ -15,6 +15,7 @@ import { PrimaryButton } from '@/components/buttons';
 import { DigitBoxes } from '@/components/DigitBoxes';
 import { GlassCard } from '@/components/GlassCard';
 import * as auth from '@/data/auth';
+import { webCryptoReady } from '@/lib/webcrypto-polyfill';
 import { useStore } from '@/data/store';
 import { colors, fonts, layout, type } from '@/theme';
 
@@ -115,6 +116,7 @@ export default function Auth() {
                       // to be on Supabase's redirect allow list.
                       <Text selectable style={styles.devUri}>
                         redirect: {auth.googleRedirectUri()}
+                        {'\n'}pkce: {webCryptoReady ? 'S256' : 'PLAIN — insecure'}
                       </Text>
                     ) : null}
                     <View style={styles.orRow}>
