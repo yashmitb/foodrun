@@ -30,6 +30,13 @@ export const supabase: SupabaseClient<Database> | null = isBackendConfigured
         storage: Platform.OS === 'web' ? undefined : AsyncStorage,
         autoRefreshToken: true,
         persistSession: true,
+        /*
+         * PKCE, not implicit. The OAuth redirect comes back through a custom
+         * URL scheme that any app on the device can claim, so the response
+         * must not carry a usable token — with PKCE it carries a code that
+         * is worthless without the verifier held in this app.
+         */
+        flowType: 'pkce',
         // There is no URL to parse a session out of in a native app.
         detectSessionInUrl: Platform.OS === 'web',
       },

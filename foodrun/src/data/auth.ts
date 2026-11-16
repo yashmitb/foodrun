@@ -1,3 +1,6 @@
+import { makeRedirectUri } from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+
 import { isBackendConfigured, requireSupabase } from '@/lib/supabase';
 
 /**
@@ -108,6 +111,12 @@ export async function currentUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+/**
+ * Whether to offer Google at all. Only with a backend: the demo path has no
+ * provider to talk to, and a button that cannot work is worse than no button.
+ */
+export const googleAvailable = authMode === 'supabase';
+
 /** How long the code is, so the input can size itself. */
 export const codeLength = authMode === 'supabase' ? 6 : 4;
 
@@ -122,4 +131,84 @@ export async function hasLiveSession(): Promise<boolean> {
   if (authMode !== 'supabase') return false;
   const { data } = await requireSupabase().auth.getSession();
   return !!data.session;
+}
+
+// --------------------------------------------------------------- Google
+
+/**
+ * §2 — Sign in with the UCSD Google account.
+ *
+ * Better than a posted code on two counts. It cannot be rate-limited by an
+ * email quota, and it is stronger evidence: a one-time code proves someone
+ * can read an inbox, while Google returns a hosted-domain claim that proves
+ * the account *is* a ucsd.edu Workspace account.
+ *
+ * The browser does the round trip rather than a native sheet, because a
+ * native sheet needs a development build and this has to keep working in
+ * Expo Go. Swapping to the native picker later changes this function and
+ * nothing else.
+ */
+export async function signInWithGoogle(): Promise<AuthResult & { email?: string }> {
+  if (authMode !== 'supabase') return { ok: false, message: UNCONFIGURED };
+
+  const supabase = requireSupabase();
+  const redirectTo = makeRedirectUri({ scheme: 'foodrun', path: 'auth-callback' });
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+      // We open the URL ourselves so the result comes back to us instead of
+      // navigating away from the app.
+      skipBrowserRedirect: true,
+      queryParams: {
+        // Asks Google to show only ucsd.edu accounts. A hint for the person,
+        // not a control: it is a query parameter and anyone can change it,
+        // which is why the address is checked again below and the database
+        // refuses a non-UCSD row regardless.
+        hd: 'ucsd.edu',
+        prompt: 'select_account',
+      },
+    },
+  });
+  if (error || !data?.url) {
+    return { ok: false, message: error?.message ?? 'Could not reach Google.' };
+  }
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (result.type !== 'success') {
+    return { ok: false, message: 'Sign-in cancelled.' };
+  }
+
+  const code = new URL(result.url).searchParams.get('code');
+  if (!code) return { ok: false, message: 'Google did not return a sign-in code.' };
+
+  const { data: session, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  if (exchangeError) return { ok: false, message: exchangeError.message };
+
+  const user = session.user;
+  const email = user?.email?.toLowerCase() ?? '';
+
+  /**
+   * Google can be asked to show only UCSD accounts; it cannot be trusted to
+   * have obeyed. Check what actually came back, and sign straight back out
+   * if it is not UCSD — the trigger on auth.users refuses the row anyway, so
+   * this is about saying why rather than about safety.
+   */
+  if (!isUcsdEmail(email)) {
+    await supabase.auth.signOut();
+    return { ok: false, message: 'Use your UCSD Google account, not a personal one.' };
+  }
+
+  const name =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    (user?.user_metadata?.name as string | undefined) ??
+    email.split('@')[0];
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert({ id: user!.id, name, ucsd_email: email }, { onConflict: 'id', ignoreDuplicates: true });
+  if (profileError) return { ok: false, message: profileError.message };
+
+  return { ok: true, email };
 }

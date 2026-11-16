@@ -57,6 +57,23 @@ export default function Auth() {
     setStep('code');
   };
 
+  /**
+   * One tap, no inbox. Preferred over the code where it is available, which
+   * is why it sits above the email field rather than under it.
+   */
+  const google = async () => {
+    setBusy(true);
+    const result = await auth.signInWithGoogle();
+    setBusy(false);
+    if (!result.ok) {
+      // Cancelling is not an error worth shouting about.
+      setError(result.message === 'Sign-in cancelled.' ? null : result.message);
+      return;
+    }
+    signIn(result.email ?? '');
+    router.replace('/onboarding');
+  };
+
   const verify = async () => {
     if (code.length !== len) return;
     setBusy(true);
@@ -85,6 +102,20 @@ export default function Auth() {
           <GlassCard style={{ marginTop: 24 }}>
             {step === 'email' ? (
               <>
+                {auth.googleAvailable ? (
+                  <>
+                    <PrimaryButton
+                      label={busy ? 'Opening Google…' : 'Continue with UCSD Google'}
+                      disabled={busy}
+                      onPress={google}
+                    />
+                    <View style={styles.orRow}>
+                      <View style={styles.rule} />
+                      <Text style={styles.orText}>or</Text>
+                      <View style={styles.rule} />
+                    </View>
+                  </>
+                ) : null}
                 <Text style={styles.label}>UCSD EMAIL</Text>
                 <TextInput
                   value={email}
@@ -163,6 +194,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   error: { marginTop: 8, fontSize: 13, color: colors.danger, fontFamily: fonts.medium },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
+  rule: { flex: 1, height: 1, backgroundColor: colors.line },
+  orText: { fontSize: 13, color: colors.faint, fontFamily: fonts.medium },
   hint: { marginTop: 10, fontSize: 12, color: colors.faint, fontFamily: fonts.regular },
   foot: {
     marginTop: 16,
