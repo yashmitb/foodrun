@@ -24,8 +24,10 @@ node -v          # must print v22.x
 
 ### 1.3 Run the SQL
 
-**SQL Editor → New query.** Paste and run these **in order**, one at a time.
-Wait for "Success" before the next.
+**SQL Editor → New query**, paste the whole of **`supabase/setup.sql`**, Run.
+
+That one file is the four below concatenated in order, so there is nothing to
+get wrong:
 
 | # | File | What it does |
 |---|---|---|
@@ -34,8 +36,9 @@ Wait for "Success" before the next.
 | 3 | `supabase/migrations/0003_hardening.sql` | **locks it down — do not skip** |
 | 4 | `supabase/seed.sql` | halls, stations, destinations |
 
-> `0003` undoes several things `0002` set up. Running 2 without 3 leaves the
-> database open in ways described at the top of that file. Run all four.
+> `0003` undoes several things `0002` sets up. Running 2 without 3 leaves the
+> database open in the ways described at the top of that file. The combined
+> file keeps them in the right order.
 
 ### 1.4 Copy your keys
 
