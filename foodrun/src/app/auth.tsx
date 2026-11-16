@@ -109,6 +109,14 @@ export default function Auth() {
                       disabled={busy}
                       onPress={google}
                     />
+                    {__DEV__ ? (
+                      // The single most useful thing to see when the browser
+                      // comes back to the wrong place: this exact string has
+                      // to be on Supabase's redirect allow list.
+                      <Text selectable style={styles.devUri}>
+                        redirect: {auth.googleRedirectUri()}
+                      </Text>
+                    ) : null}
                     <View style={styles.orRow}>
                       <View style={styles.rule} />
                       <Text style={styles.orText}>or</Text>
@@ -194,6 +202,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   error: { marginTop: 8, fontSize: 13, color: colors.danger, fontFamily: fonts.medium },
+  devUri: {
+    marginTop: 8,
+    fontSize: 10,
+    color: colors.faint,
+    fontFamily: fonts.regular,
+  },
   orRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
   rule: { flex: 1, height: 1, backgroundColor: colors.line },
   orText: { fontSize: 13, color: colors.faint, fontFamily: fonts.medium },

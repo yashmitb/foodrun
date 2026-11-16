@@ -78,16 +78,45 @@ justify, and none of them are needed to learn who someone is.
 - Client ID and Client Secret from above
 - Save
 
-While you are on that page, under **URL Configuration** add these redirect
-URLs so the app can be returned to:
+### URL Configuration — the part that bites
+
+**Authentication → URL Configuration.**
+
+Supabase will only redirect to an address on this list. When the address is
+not on it, Supabase does not error: it silently falls back to **Site URL**,
+which is `http://localhost:3000` out of the box. The browser then shows
+"Safari can't open the page because it couldn't connect to the server" after
+a sign-in that actually succeeded.
+
+**Site URL**
 
 ```
 foodrun://auth-callback
-exp://*
 ```
 
-`exp://*` is for Expo Go, which hands out a different address each session.
-Remove it before you ship.
+So that even the fallback lands somewhere real.
+
+**Redirect URLs** — add all three:
+
+```
+foodrun://auth-callback
+exp://**
+exp://*/--/auth-callback
+```
+
+`foodrun://auth-callback` is what a real build uses. The two `exp://` entries
+are for Expo Go, which cannot own a custom scheme and instead hands out
+`exp://<your-lan-ip>:8081/--/auth-callback` — an address that changes with
+the network you are on, which is why it has to be a wildcard rather than a
+literal. In Supabase's matcher `*` stops at a separator and `**` does not, so
+a bare `exp://*` does not match a URL with a host, a port and a path. That is
+the mistake to avoid.
+
+Drop the `exp://` entries before you ship.
+
+The sign-in screen prints the exact redirect it is asking for, underneath the
+Google button, in development builds. If sign-in lands on localhost, compare
+that string against this list — they have to agree.
 
 ---
 

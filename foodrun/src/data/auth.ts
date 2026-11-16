@@ -136,6 +136,23 @@ export async function hasLiveSession(): Promise<boolean> {
 // --------------------------------------------------------------- Google
 
 /**
+ * Where Google should send the browser back to.
+ *
+ * Not a constant, and not `foodrun://` in development. Expo Go cannot own a
+ * custom scheme, so it hands out `exp://<lan-ip>:8081/--/auth-callback`,
+ * which changes with the machine's address. A standalone build does own the
+ * scheme and gets `foodrun://auth-callback`.
+ *
+ * Whatever this returns has to be on Supabase's redirect allow list. When it
+ * is not, Supabase quietly falls back to the project's Site URL - which is
+ * `localhost:3000` by default, so the browser lands on "Safari can't open
+ * the page" and the app never hears back.
+ */
+export function googleRedirectUri(): string {
+  return makeRedirectUri({ scheme: 'foodrun', path: 'auth-callback' });
+}
+
+/**
  * §2 — Sign in with the UCSD Google account.
  *
  * Better than a posted code on two counts. It cannot be rate-limited by an
@@ -152,7 +169,7 @@ export async function signInWithGoogle(): Promise<AuthResult & { email?: string 
   if (authMode !== 'supabase') return { ok: false, message: UNCONFIGURED };
 
   const supabase = requireSupabase();
-  const redirectTo = makeRedirectUri({ scheme: 'foodrun', path: 'auth-callback' });
+  const redirectTo = googleRedirectUri();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
