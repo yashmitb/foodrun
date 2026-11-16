@@ -39,6 +39,19 @@ pages that no longer exist:
   produce `redirect_uri_mismatch` and no other clue. Paste it; do not type
   it.
 
+  The Web application form has **two** URL fields and they take different
+  shapes. The callback belongs in the second one:
+
+  | Field | Value |
+  |---|---|
+  | Authorised JavaScript origins | `https://iqpdazrkcwdrylpvbhgb.supabase.co` — host only |
+  | Authorised redirect URIs | `https://iqpdazrkcwdrylpvbhgb.supabase.co/auth/v1/callback` |
+
+  Putting the callback in the origins box gives *Invalid Origin: URIs must
+  not contain a path or end with "/"*. Origins only matter when browser
+  JavaScript calls Google directly; this flow redirects server-side through
+  Supabase, so that field can be left empty.
+
 - Create, and copy the **Client ID** and **Client secret**.
 
 ### Audience
@@ -94,7 +107,8 @@ asks which account, and you land back in the app signed in.
 
 | What you see | What it is |
 |---|---|
-| `redirect_uri_mismatch` | Step 1.3. The URI must match Supabase's callback exactly. |
+| `redirect_uri_mismatch` | The redirect URI does not match Supabase's callback exactly. |
+| `Invalid Origin: URIs must not contain a path` | The callback went in the origins box. It belongs in **Authorised redirect URIs**. |
 | `Access blocked: app not verified` | Your address is not under **Audience → Test users**. |
 | Lands back but still signed out | Supabase redirect URLs missing `exp://*`. |
 | "Use your UCSD Google account" | Working. You picked a personal Gmail. |
