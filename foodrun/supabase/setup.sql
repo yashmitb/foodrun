@@ -1,11 +1,13 @@
 -- FoodRun — complete database setup, in one paste.
 --
 -- Supabase dashboard → SQL Editor → New query → paste all of this → Run.
--- Takes a few seconds. It is safe to run on an empty project exactly once.
 --
 -- This is supabase/migrations/0001..0003 plus seed.sql concatenated in order.
 -- 0003 deliberately drops and replaces several rules 0002 creates, so the
 -- order matters and none of it is optional.
+--
+-- Every statement is safe to run twice, so if a run fails part-way you can
+-- fix the cause and paste the whole thing again.
 
 
 
@@ -24,7 +26,7 @@ create extension if not exists "pgcrypto";
 
 -- ---------------------------------------------------------------- reference
 
-create table public.halls (
+create table if not exists public.halls (
   id         text primary key,
   name       text not null,
   college    text,
@@ -33,7 +35,7 @@ create table public.halls (
   active     boolean not null default true
 );
 
-create table public.restaurants (
+create table if not exists public.restaurants (
   id      uuid primary key default gen_random_uuid(),
   hall_id text not null references public.halls (id) on delete cascade,
   name    text not null,
@@ -42,23 +44,25 @@ create table public.restaurants (
   unique (hall_id, name)
 );
 
-create table public.destinations (
+create table if not exists public.destinations (
   id   text primary key,
   name text not null,
   lat  double precision,
   lng  double precision
 );
 
-create table public.drop_spots (
+create table if not exists public.drop_spots (
   id             uuid primary key default gen_random_uuid(),
   destination_id text not null references public.destinations (id) on delete cascade,
   label          text not null,
-  qr_code        text unique
+  qr_code        text unique,
+  -- So re-running the seed updates rather than duplicates.
+  unique (destination_id, label)
 );
 
 -- ------------------------------------------------------------------ people
 
-create table public.profiles (
+create table if not exists public.profiles (
   id                 uuid primary key references auth.users (id) on delete cascade,
   name               text not null,
   ucsd_email         text not null unique,
@@ -75,14 +79,19 @@ create table public.profiles (
 
 -- ------------------------------------------------------------- runs/orders
 
-create type public.run_status as enum
-  ('scheduled', 'open', 'picking_up', 'delivering', 'done', 'cancelled');
+-- Guarded so the file can be re-run after a failure part-way through.
+do $$ begin
+  create type public.run_status as enum
+    ('scheduled', 'open', 'picking_up', 'delivering', 'done', 'cancelled');
+exception when duplicate_object then null; end $$;
 
-create type public.order_status as enum
-  ('pending', 'confirmed', 'picked_up', 'on_the_way', 'arrived', 'delivered',
-   'cancelled', 'problem');
+do $$ begin
+  create type public.order_status as enum
+    ('pending', 'confirmed', 'picked_up', 'on_the_way', 'arrived', 'delivered',
+     'cancelled', 'problem');
+exception when duplicate_object then null; end $$;
 
-create table public.runs (
+create table if not exists public.runs (
   id             uuid primary key default gen_random_uuid(),
   runner_id      uuid not null references public.profiles (id) on delete cascade,
   hall_id        text not null references public.halls (id),
@@ -96,7 +105,7 @@ create table public.runs (
   constraint runs_spots_left_within_total check (spots_left <= spots_total)
 );
 
-create table public.orders (
+create table if not exists public.orders (
   id                uuid primary key default gen_random_uuid(),
   run_id            uuid not null references public.runs (id) on delete cascade,
   orderer_id        uuid not null references public.profiles (id) on delete cascade,
@@ -119,12 +128,12 @@ create table public.orders (
   unique (run_id, orderer_id)
 );
 
-create index orders_run_id_idx on public.orders (run_id);
-create index orders_orderer_id_idx on public.orders (orderer_id);
-create index runs_open_idx on public.runs (destination_id, leave_at)
+create index if not exists orders_run_id_idx on public.orders (run_id);
+create index if not exists orders_orderer_id_idx on public.orders (orderer_id);
+create index if not exists runs_open_idx on public.runs (destination_id, leave_at)
   where status in ('open', 'scheduled');
 
-create table public.order_events (
+create table if not exists public.order_events (
   id         uuid primary key default gen_random_uuid(),
   order_id   uuid not null references public.orders (id) on delete cascade,
   status     public.order_status not null,
@@ -133,9 +142,9 @@ create table public.order_events (
   created_at timestamptz not null default now()
 );
 
-create index order_events_order_id_idx on public.order_events (order_id, created_at);
+create index if not exists order_events_order_id_idx on public.order_events (order_id, created_at);
 
-create table public.ratings (
+create table if not exists public.ratings (
   id         uuid primary key default gen_random_uuid(),
   order_id   uuid not null references public.orders (id) on delete cascade,
   from_id    uuid not null references public.profiles (id) on delete cascade,
@@ -146,10 +155,12 @@ create table public.ratings (
   unique (order_id, from_id)
 );
 
-create type public.report_reason as enum
-  ('late', 'wrong_or_missing', 'cannot_find_runner', 'other');
+do $$ begin
+  create type public.report_reason as enum
+    ('late', 'wrong_or_missing', 'cannot_find_runner', 'other');
+exception when duplicate_object then null; end $$;
 
-create table public.reports (
+create table if not exists public.reports (
   id          uuid primary key default gen_random_uuid(),
   order_id    uuid not null references public.orders (id) on delete cascade,
   reporter_id uuid not null references public.profiles (id) on delete cascade,
@@ -168,6 +179,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_touch_updated_at on public.orders;
 create trigger orders_touch_updated_at
   before update on public.orders
   for each row execute function public.touch_updated_at();
@@ -188,6 +200,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_log_event on public.orders;
 create trigger orders_log_event
   after insert or update of status on public.orders
   for each row execute function public.log_order_event();
@@ -213,6 +226,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_sync_run_spots on public.orders;
 create trigger orders_sync_run_spots
   after insert or update of status or delete on public.orders
   for each row execute function public.sync_run_spots();
@@ -246,32 +260,45 @@ alter table public.destinations  enable row level security;
 alter table public.drop_spots    enable row level security;
 
 -- Reference data is public to signed-in students and writable by nobody.
-create policy halls_read        on public.halls        for select to authenticated using (true);
-create policy restaurants_read  on public.restaurants  for select to authenticated using (true);
+drop policy if exists halls_read on public.halls;
+create policy halls_read on public.halls for select to authenticated using (true);
+
+drop policy if exists restaurants_read on public.restaurants;
+create policy restaurants_read on public.restaurants for select to authenticated using (true);
+
+drop policy if exists destinations_read on public.destinations;
 create policy destinations_read on public.destinations for select to authenticated using (true);
-create policy drop_spots_read   on public.drop_spots   for select to authenticated using (true);
+
+drop policy if exists drop_spots_read on public.drop_spots;
+create policy drop_spots_read on public.drop_spots for select to authenticated using (true);
 
 -- ---------------------------------------------------------------- profiles
 
 -- Names and ratings are visible to other students: you are about to hand a
 -- stranger your food, and §6.2 puts their name and rating on the run card.
+drop policy if exists profiles_read_all on public.profiles;
 create policy profiles_read_all on public.profiles
   for select to authenticated using (true);
 
+drop policy if exists profiles_insert_self on public.profiles;
 create policy profiles_insert_self on public.profiles
   for insert to authenticated with check (id = auth.uid());
 
+drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
 -- -------------------------------------------------------------------- runs
 
+drop policy if exists runs_read_all on public.runs;
 create policy runs_read_all on public.runs
   for select to authenticated using (true);
 
+drop policy if exists runs_insert_own on public.runs;
 create policy runs_insert_own on public.runs
   for insert to authenticated with check (runner_id = auth.uid());
 
+drop policy if exists runs_update_own on public.runs;
 create policy runs_update_own on public.runs
   for update to authenticated using (runner_id = auth.uid()) with check (runner_id = auth.uid());
 
@@ -286,20 +313,24 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- The base table: only the person who placed the order.
+drop policy if exists orders_read_own on public.orders;
 create policy orders_read_own on public.orders
   for select to authenticated using (orderer_id = auth.uid());
 
+drop policy if exists orders_insert_own on public.orders;
 create policy orders_insert_own on public.orders
   for insert to authenticated with check (orderer_id = auth.uid());
 
 -- An orderer may cancel inside the window; a runner may move the status along.
 -- Neither may rewrite the order's identity, which the column grants below
 -- restrict further.
+drop policy if exists orders_update_own on public.orders;
 create policy orders_update_own on public.orders
   for update to authenticated
   using (orderer_id = auth.uid())
   with check (orderer_id = auth.uid());
 
+drop policy if exists orders_update_by_runner on public.orders;
 create policy orders_update_by_runner on public.orders
   for update to authenticated
   using (public.is_runner_for_order(orders))
@@ -309,6 +340,8 @@ create policy orders_update_by_runner on public.orders
  * What a runner sees. No handoff_code, no payment_intent_id, no orderer id -
  * a first name is enough to match a bag to a face (§6.7).
  */
+drop view if exists public.orders_for_runner;
+
 create view public.orders_for_runner
 with (security_invoker = true) as
   select o.id,
@@ -334,11 +367,13 @@ grant select on public.orders_for_runner to authenticated;
 
 -- The view is security_invoker, so it is still governed by orders_read_own
 -- above. Give the runner a path to those rows without widening the table.
+drop policy if exists orders_read_as_runner on public.orders;
 create policy orders_read_as_runner on public.orders
   for select to authenticated using (public.is_runner_for_order(orders));
 
 -- ------------------------------------------------------------ order_events
 
+drop policy if exists order_events_read on public.order_events;
 create policy order_events_read on public.order_events
   for select to authenticated using (
     exists (
@@ -353,24 +388,34 @@ revoke insert, update, delete on public.order_events from authenticated;
 
 -- --------------------------------------------------------- ratings/reports
 
+drop policy if exists ratings_read on public.ratings;
 create policy ratings_read on public.ratings
   for select to authenticated using (from_id = auth.uid() or to_id = auth.uid());
 
+drop policy if exists ratings_insert_own on public.ratings;
 create policy ratings_insert_own on public.ratings
   for insert to authenticated with check (from_id = auth.uid());
 
+drop policy if exists reports_read_own on public.reports;
 create policy reports_read_own on public.reports
   for select to authenticated using (reporter_id = auth.uid());
 
+drop policy if exists reports_insert_own on public.reports;
 create policy reports_insert_own on public.reports
   for insert to authenticated with check (reporter_id = auth.uid());
 
 -- ---------------------------------------------------------------- realtime
 
 -- §6.5: the orderer's bar and timeline update from the runner's real actions.
-alter publication supabase_realtime add table public.orders;
-alter publication supabase_realtime add table public.order_events;
-alter publication supabase_realtime add table public.runs;
+do $$ begin
+  alter publication supabase_realtime add table public.orders;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.order_events;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.runs;
+exception when duplicate_object then null; end $$;
 
 
 
@@ -447,6 +492,7 @@ drop policy if exists profiles_read_all on public.profiles;
 drop policy if exists profiles_update_self on public.profiles;
 
 -- You can read your own row in full.
+drop policy if exists profiles_read_self on public.profiles;
 create policy profiles_read_self on public.profiles
   for select to authenticated using (id = auth.uid());
 
@@ -456,6 +502,8 @@ create policy profiles_read_self on public.profiles
  * email address: 30,000 students' addresses behind one signed-in account is
  * a mailing list, and the app has no reason to hand it out.
  */
+drop view if exists public.public_profiles;
+
 create view public.public_profiles
 with (security_invoker = false) as
   select id, name, avatar_url, rating_avg, rating_count
@@ -472,6 +520,16 @@ grant select on public.public_profiles to authenticated;
 create or replace function public.guard_profile_update()
 returns trigger language plpgsql as $$
 begin
+  /*
+   * rate_order recomputes rating_avg itself and must be allowed through.
+   * It announces itself with a transaction-local setting rather than being
+   * exempted by role, because every one of these functions is SECURITY
+   * DEFINER and a blanket role exemption would exempt all of them.
+   */
+  if current_setting('foodrun.system_update', true) = 'on' then
+    return new;
+  end if;
+
   if new.id is distinct from old.id
      or new.ucsd_email is distinct from old.ucsd_email
      or new.rating_avg is distinct from old.rating_avg
@@ -485,10 +543,12 @@ begin
 end;
 $$;
 
+drop trigger if exists profiles_guard_update on public.profiles;
 create trigger profiles_guard_update
   before update on public.profiles
   for each row execute function public.guard_profile_update();
 
+drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
@@ -510,11 +570,27 @@ revoke insert, update, delete on public.reports from authenticated;
 -- Reads stay as they were: your own orders, and any run.
 -- (orders_read_own and runs_read_all survive from 0002.)
 
-/** A four digit code with no modulo bias, from the CSPRNG rather than random(). */
+/**
+ * A four digit code from the CSPRNG.
+ *
+ * Rejection sampling rather than a modulo: 65536 is not a multiple of 10000,
+ * so `% 10000` makes codes under 5536 more likely than the rest. The bias is
+ * small and this is the one secret that proves a delivery happened, so it is
+ * not worth having at all. Draw 14 bits and discard anything over 9999.
+ */
 create or replace function public.new_handoff_code()
-returns char(4) language sql volatile as $$
-  select lpad(((get_byte(gen_random_bytes(2), 0) << 8 |
-                get_byte(gen_random_bytes(2), 1)) % 10000)::text, 4, '0')::char(4);
+returns char(4) language plpgsql volatile as $$
+declare
+  b bytea;
+  n int;
+begin
+  loop
+    b := gen_random_bytes(2);
+    n := ((get_byte(b, 0) << 8) | get_byte(b, 1)) & 16383;
+    exit when n < 10000;
+  end loop;
+  return lpad(n::text, 4, '0')::char(4);
+end;
 $$;
 
 /**
@@ -557,7 +633,9 @@ begin
                            spots_total, spots_left, fee_cents, status)
   values (auth.uid(), p_hall_id, p_destination_id, p_leave_at,
           p_spots, p_spots, p_fee_cents,
-          case when p_leave_at > now() + interval '45 minutes' then 'scheduled' else 'open' end)
+          -- Cast explicitly: a CASE yields text, and status is an enum.
+          (case when p_leave_at > now() + interval '45 minutes'
+                then 'scheduled' else 'open' end)::public.run_status)
   returning * into result;
 
   return result;
@@ -622,7 +700,7 @@ begin
   ) values (
     the_run.id, auth.uid(), the_run.hall_id, p_restaurant_id, p_t2g_last4,
     nullif(trim(p_order_name), ''), p_drop_spot_id, trim(p_drop_spot_text),
-    public.new_handoff_code(), 'pending',
+    public.new_handoff_code(), 'pending'::public.order_status,
     least(now() + interval '2 minutes', the_run.leave_at), the_run.fee_cents
   ) returning * into result;
 
@@ -656,14 +734,14 @@ end;
 $$;
 
 /** §6.7 — runner transitions, each checking it is this run's runner. */
-create or replace function public.runner_set_status(p_order_id uuid, p_status order_status)
+create or replace function public.runner_set_status(p_order_id uuid, p_status public.order_status)
 returns public.orders
 language plpgsql security definer set search_path = public as $$
 declare
-  current public.orders;
-  result  public.orders;
+  cur    public.orders;
+  result public.orders;
 begin
-  select o.* into current
+  select o.* into cur
     from public.orders o
     join public.runs r on r.id = o.run_id
    where o.id = p_order_id and r.runner_id = auth.uid()
@@ -673,10 +751,10 @@ begin
   -- Only these moves, only in this order. 'delivered' is absent on purpose:
   -- it is reachable solely through runner_deliver, which needs the code.
   if not (
-    (current.status = 'confirmed'  and p_status = 'picked_up')  or
-    (current.status = 'picked_up'  and p_status = 'on_the_way') or
-    (current.status = 'on_the_way' and p_status = 'arrived')    or
-    (current.status in ('confirmed', 'picked_up', 'on_the_way', 'arrived')
+    (cur.status = 'confirmed'  and p_status = 'picked_up')  or
+    (cur.status = 'picked_up'  and p_status = 'on_the_way') or
+    (cur.status = 'on_the_way' and p_status = 'arrived')    or
+    (cur.status in ('confirmed', 'picked_up', 'on_the_way', 'arrived')
        and p_status = 'problem')
   ) then
     raise exception 'That is not a move this order can make.';
@@ -707,18 +785,18 @@ create or replace function public.runner_deliver(p_order_id uuid, p_code text)
 returns public.orders
 language plpgsql security definer set search_path = public as $$
 declare
-  current public.orders;
-  result  public.orders;
+  cur    public.orders;
+  result public.orders;
   recent  int;
 begin
-  select o.* into current
+  select o.* into cur
     from public.orders o
     join public.runs r on r.id = o.run_id
    where o.id = p_order_id and r.runner_id = auth.uid()
    for update of o;
   if not found then raise exception 'Not your order.'; end if;
-  if current.status = 'delivered' then return current; end if;
-  if current.status not in ('picked_up', 'on_the_way', 'arrived') then
+  if cur.status = 'delivered' then return current; end if;
+  if cur.status not in ('picked_up', 'on_the_way', 'arrived') then
     raise exception 'Pick the bag up first.';
   end if;
 
@@ -729,7 +807,7 @@ begin
     raise exception 'Too many wrong codes. Ask them to show it again in a few minutes.';
   end if;
 
-  if current.handoff_code <> p_code then
+  if cur.handoff_code <> p_code then
     insert into public.handoff_attempts (order_id, actor_id) values (p_order_id, auth.uid());
     raise exception 'That code did not match.';
   end if;
@@ -750,10 +828,12 @@ declare
   target    uuid;
 begin
   if p_stars < 1 or p_stars > 5 then raise exception 'Stars must be 1 to 5.'; end if;
-  select o.*, r.runner_id into the_order, runner
-    from public.orders o join public.runs r on r.id = o.run_id
-   where o.id = p_order_id;
+  -- Two selects, not one. Postgres refuses to put a record variable in a
+  -- multi-item INTO list, which is what "record variable cannot be part of
+  -- multiple-item INTO list" was telling us.
+  select o.* into the_order from public.orders o where o.id = p_order_id;
   if not found then raise exception 'No such order.'; end if;
+  select r.runner_id into runner from public.runs r where r.id = the_order.run_id;
   if the_order.status <> 'delivered' then raise exception 'Not delivered yet.'; end if;
 
   if auth.uid() = the_order.orderer_id then target := runner;
@@ -766,17 +846,20 @@ begin
   on conflict (order_id, from_id) do nothing;
 
   -- Ratings are a derived number, which is why clients cannot write one.
+  -- Local to this transaction, so it cannot leak into the next statement.
+  perform set_config('foodrun.system_update', 'on', true);
   update public.profiles p
      set rating_avg = sub.avg_stars, rating_count = sub.n
     from (select round(avg(stars)::numeric, 1) as avg_stars, count(*) as n
             from public.ratings where to_id = target) sub
    where p.id = target;
+  perform set_config('foodrun.system_update', 'off', true);
 end;
 $$;
 
 /** §6.5 — report a problem. */
 create or replace function public.report_order(
-  p_order_id uuid, p_reason report_reason, p_note text default null
+  p_order_id uuid, p_reason public.report_reason, p_note text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 begin
@@ -796,20 +879,20 @@ $$;
 revoke all on function public.post_run(text, text, timestamptz, int, int) from public;
 revoke all on function public.join_run(uuid, uuid, text, text, text, uuid) from public;
 revoke all on function public.cancel_order(uuid) from public;
-revoke all on function public.runner_set_status(uuid, order_status) from public;
+revoke all on function public.runner_set_status(uuid, public.order_status) from public;
 revoke all on function public.runner_deliver(uuid, text) from public;
 revoke all on function public.rate_order(uuid, int, text) from public;
-revoke all on function public.report_order(uuid, report_reason, text) from public;
+revoke all on function public.report_order(uuid, public.report_reason, text) from public;
 revoke all on function public.settle_cancel_windows() from public;
 revoke all on function public.new_handoff_code() from public;
 
 grant execute on function public.post_run(text, text, timestamptz, int, int) to authenticated;
 grant execute on function public.join_run(uuid, uuid, text, text, text, uuid) to authenticated;
 grant execute on function public.cancel_order(uuid) to authenticated;
-grant execute on function public.runner_set_status(uuid, order_status) to authenticated;
+grant execute on function public.runner_set_status(uuid, public.order_status) to authenticated;
 grant execute on function public.runner_deliver(uuid, text) to authenticated;
 grant execute on function public.rate_order(uuid, int, text) to authenticated;
-grant execute on function public.report_order(uuid, report_reason, text) to authenticated;
+grant execute on function public.report_order(uuid, public.report_reason, text) to authenticated;
 grant execute on function public.settle_cancel_windows() to authenticated;
 
 -- =====================================================================
@@ -926,4 +1009,4 @@ insert into public.drop_spots (destination_id, label) values
   ('sixth-res', 'Sixth residence lobbies, Front desk'),
   ('eighth-res', 'Eighth residence lobbies, Lobby'),
   ('eighth-res', 'Eighth residence lobbies, Front desk')
-on conflict do nothing;
+on conflict (destination_id, label) do nothing;

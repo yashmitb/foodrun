@@ -87,4 +87,4 @@ insert into public.drop_spots (destination_id, label) values
   ('sixth-res', 'Sixth residence lobbies, Front desk'),
   ('eighth-res', 'Eighth residence lobbies, Lobby'),
   ('eighth-res', 'Eighth residence lobbies, Front desk')
-on conflict do nothing;
+on conflict (destination_id, label) do nothing;

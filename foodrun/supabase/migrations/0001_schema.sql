@@ -9,7 +9,7 @@ create extension if not exists "pgcrypto";
 
 -- ---------------------------------------------------------------- reference
 
-create table public.halls (
+create table if not exists public.halls (
   id         text primary key,
   name       text not null,
   college    text,
@@ -18,7 +18,7 @@ create table public.halls (
   active     boolean not null default true
 );
 
-create table public.restaurants (
+create table if not exists public.restaurants (
   id      uuid primary key default gen_random_uuid(),
   hall_id text not null references public.halls (id) on delete cascade,
   name    text not null,
@@ -27,23 +27,25 @@ create table public.restaurants (
   unique (hall_id, name)
 );
 
-create table public.destinations (
+create table if not exists public.destinations (
   id   text primary key,
   name text not null,
   lat  double precision,
   lng  double precision
 );
 
-create table public.drop_spots (
+create table if not exists public.drop_spots (
   id             uuid primary key default gen_random_uuid(),
   destination_id text not null references public.destinations (id) on delete cascade,
   label          text not null,
-  qr_code        text unique
+  qr_code        text unique,
+  -- So re-running the seed updates rather than duplicates.
+  unique (destination_id, label)
 );
 
 -- ------------------------------------------------------------------ people
 
-create table public.profiles (
+create table if not exists public.profiles (
   id                 uuid primary key references auth.users (id) on delete cascade,
   name               text not null,
   ucsd_email         text not null unique,
@@ -60,14 +62,19 @@ create table public.profiles (
 
 -- ------------------------------------------------------------- runs/orders
 
-create type public.run_status as enum
-  ('scheduled', 'open', 'picking_up', 'delivering', 'done', 'cancelled');
+-- Guarded so the file can be re-run after a failure part-way through.
+do $$ begin
+  create type public.run_status as enum
+    ('scheduled', 'open', 'picking_up', 'delivering', 'done', 'cancelled');
+exception when duplicate_object then null; end $$;
 
-create type public.order_status as enum
-  ('pending', 'confirmed', 'picked_up', 'on_the_way', 'arrived', 'delivered',
-   'cancelled', 'problem');
+do $$ begin
+  create type public.order_status as enum
+    ('pending', 'confirmed', 'picked_up', 'on_the_way', 'arrived', 'delivered',
+     'cancelled', 'problem');
+exception when duplicate_object then null; end $$;
 
-create table public.runs (
+create table if not exists public.runs (
   id             uuid primary key default gen_random_uuid(),
   runner_id      uuid not null references public.profiles (id) on delete cascade,
   hall_id        text not null references public.halls (id),
@@ -81,7 +88,7 @@ create table public.runs (
   constraint runs_spots_left_within_total check (spots_left <= spots_total)
 );
 
-create table public.orders (
+create table if not exists public.orders (
   id                uuid primary key default gen_random_uuid(),
   run_id            uuid not null references public.runs (id) on delete cascade,
   orderer_id        uuid not null references public.profiles (id) on delete cascade,
@@ -104,12 +111,12 @@ create table public.orders (
   unique (run_id, orderer_id)
 );
 
-create index orders_run_id_idx on public.orders (run_id);
-create index orders_orderer_id_idx on public.orders (orderer_id);
-create index runs_open_idx on public.runs (destination_id, leave_at)
+create index if not exists orders_run_id_idx on public.orders (run_id);
+create index if not exists orders_orderer_id_idx on public.orders (orderer_id);
+create index if not exists runs_open_idx on public.runs (destination_id, leave_at)
   where status in ('open', 'scheduled');
 
-create table public.order_events (
+create table if not exists public.order_events (
   id         uuid primary key default gen_random_uuid(),
   order_id   uuid not null references public.orders (id) on delete cascade,
   status     public.order_status not null,
@@ -118,9 +125,9 @@ create table public.order_events (
   created_at timestamptz not null default now()
 );
 
-create index order_events_order_id_idx on public.order_events (order_id, created_at);
+create index if not exists order_events_order_id_idx on public.order_events (order_id, created_at);
 
-create table public.ratings (
+create table if not exists public.ratings (
   id         uuid primary key default gen_random_uuid(),
   order_id   uuid not null references public.orders (id) on delete cascade,
   from_id    uuid not null references public.profiles (id) on delete cascade,
@@ -131,10 +138,12 @@ create table public.ratings (
   unique (order_id, from_id)
 );
 
-create type public.report_reason as enum
-  ('late', 'wrong_or_missing', 'cannot_find_runner', 'other');
+do $$ begin
+  create type public.report_reason as enum
+    ('late', 'wrong_or_missing', 'cannot_find_runner', 'other');
+exception when duplicate_object then null; end $$;
 
-create table public.reports (
+create table if not exists public.reports (
   id          uuid primary key default gen_random_uuid(),
   order_id    uuid not null references public.orders (id) on delete cascade,
   reporter_id uuid not null references public.profiles (id) on delete cascade,
@@ -153,6 +162,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_touch_updated_at on public.orders;
 create trigger orders_touch_updated_at
   before update on public.orders
   for each row execute function public.touch_updated_at();
@@ -173,6 +183,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_log_event on public.orders;
 create trigger orders_log_event
   after insert or update of status on public.orders
   for each row execute function public.log_order_event();
@@ -198,6 +209,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_sync_run_spots on public.orders;
 create trigger orders_sync_run_spots
   after insert or update of status or delete on public.orders
   for each row execute function public.sync_run_spots();

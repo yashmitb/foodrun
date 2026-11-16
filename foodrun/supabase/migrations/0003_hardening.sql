@@ -67,6 +67,7 @@ drop policy if exists profiles_read_all on public.profiles;
 drop policy if exists profiles_update_self on public.profiles;
 
 -- You can read your own row in full.
+drop policy if exists profiles_read_self on public.profiles;
 create policy profiles_read_self on public.profiles
   for select to authenticated using (id = auth.uid());
 
@@ -76,6 +77,8 @@ create policy profiles_read_self on public.profiles
  * email address: 30,000 students' addresses behind one signed-in account is
  * a mailing list, and the app has no reason to hand it out.
  */
+drop view if exists public.public_profiles;
+
 create view public.public_profiles
 with (security_invoker = false) as
   select id, name, avatar_url, rating_avg, rating_count
@@ -92,6 +95,16 @@ grant select on public.public_profiles to authenticated;
 create or replace function public.guard_profile_update()
 returns trigger language plpgsql as $$
 begin
+  /*
+   * rate_order recomputes rating_avg itself and must be allowed through.
+   * It announces itself with a transaction-local setting rather than being
+   * exempted by role, because every one of these functions is SECURITY
+   * DEFINER and a blanket role exemption would exempt all of them.
+   */
+  if current_setting('foodrun.system_update', true) = 'on' then
+    return new;
+  end if;
+
   if new.id is distinct from old.id
      or new.ucsd_email is distinct from old.ucsd_email
      or new.rating_avg is distinct from old.rating_avg
@@ -105,10 +118,12 @@ begin
 end;
 $$;
 
+drop trigger if exists profiles_guard_update on public.profiles;
 create trigger profiles_guard_update
   before update on public.profiles
   for each row execute function public.guard_profile_update();
 
+drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
@@ -130,11 +145,27 @@ revoke insert, update, delete on public.reports from authenticated;
 -- Reads stay as they were: your own orders, and any run.
 -- (orders_read_own and runs_read_all survive from 0002.)
 
-/** A four digit code with no modulo bias, from the CSPRNG rather than random(). */
+/**
+ * A four digit code from the CSPRNG.
+ *
+ * Rejection sampling rather than a modulo: 65536 is not a multiple of 10000,
+ * so `% 10000` makes codes under 5536 more likely than the rest. The bias is
+ * small and this is the one secret that proves a delivery happened, so it is
+ * not worth having at all. Draw 14 bits and discard anything over 9999.
+ */
 create or replace function public.new_handoff_code()
-returns char(4) language sql volatile as $$
-  select lpad(((get_byte(gen_random_bytes(2), 0) << 8 |
-                get_byte(gen_random_bytes(2), 1)) % 10000)::text, 4, '0')::char(4);
+returns char(4) language plpgsql volatile as $$
+declare
+  b bytea;
+  n int;
+begin
+  loop
+    b := gen_random_bytes(2);
+    n := ((get_byte(b, 0) << 8) | get_byte(b, 1)) & 16383;
+    exit when n < 10000;
+  end loop;
+  return lpad(n::text, 4, '0')::char(4);
+end;
 $$;
 
 /**
@@ -177,7 +208,9 @@ begin
                            spots_total, spots_left, fee_cents, status)
   values (auth.uid(), p_hall_id, p_destination_id, p_leave_at,
           p_spots, p_spots, p_fee_cents,
-          case when p_leave_at > now() + interval '45 minutes' then 'scheduled' else 'open' end)
+          -- Cast explicitly: a CASE yields text, and status is an enum.
+          (case when p_leave_at > now() + interval '45 minutes'
+                then 'scheduled' else 'open' end)::public.run_status)
   returning * into result;
 
   return result;
@@ -242,7 +275,7 @@ begin
   ) values (
     the_run.id, auth.uid(), the_run.hall_id, p_restaurant_id, p_t2g_last4,
     nullif(trim(p_order_name), ''), p_drop_spot_id, trim(p_drop_spot_text),
-    public.new_handoff_code(), 'pending',
+    public.new_handoff_code(), 'pending'::public.order_status,
     least(now() + interval '2 minutes', the_run.leave_at), the_run.fee_cents
   ) returning * into result;
 
@@ -276,14 +309,14 @@ end;
 $$;
 
 /** §6.7 — runner transitions, each checking it is this run's runner. */
-create or replace function public.runner_set_status(p_order_id uuid, p_status order_status)
+create or replace function public.runner_set_status(p_order_id uuid, p_status public.order_status)
 returns public.orders
 language plpgsql security definer set search_path = public as $$
 declare
-  current public.orders;
-  result  public.orders;
+  cur    public.orders;
+  result public.orders;
 begin
-  select o.* into current
+  select o.* into cur
     from public.orders o
     join public.runs r on r.id = o.run_id
    where o.id = p_order_id and r.runner_id = auth.uid()
@@ -293,10 +326,10 @@ begin
   -- Only these moves, only in this order. 'delivered' is absent on purpose:
   -- it is reachable solely through runner_deliver, which needs the code.
   if not (
-    (current.status = 'confirmed'  and p_status = 'picked_up')  or
-    (current.status = 'picked_up'  and p_status = 'on_the_way') or
-    (current.status = 'on_the_way' and p_status = 'arrived')    or
-    (current.status in ('confirmed', 'picked_up', 'on_the_way', 'arrived')
+    (cur.status = 'confirmed'  and p_status = 'picked_up')  or
+    (cur.status = 'picked_up'  and p_status = 'on_the_way') or
+    (cur.status = 'on_the_way' and p_status = 'arrived')    or
+    (cur.status in ('confirmed', 'picked_up', 'on_the_way', 'arrived')
        and p_status = 'problem')
   ) then
     raise exception 'That is not a move this order can make.';
@@ -327,18 +360,18 @@ create or replace function public.runner_deliver(p_order_id uuid, p_code text)
 returns public.orders
 language plpgsql security definer set search_path = public as $$
 declare
-  current public.orders;
-  result  public.orders;
+  cur    public.orders;
+  result public.orders;
   recent  int;
 begin
-  select o.* into current
+  select o.* into cur
     from public.orders o
     join public.runs r on r.id = o.run_id
    where o.id = p_order_id and r.runner_id = auth.uid()
    for update of o;
   if not found then raise exception 'Not your order.'; end if;
-  if current.status = 'delivered' then return current; end if;
-  if current.status not in ('picked_up', 'on_the_way', 'arrived') then
+  if cur.status = 'delivered' then return current; end if;
+  if cur.status not in ('picked_up', 'on_the_way', 'arrived') then
     raise exception 'Pick the bag up first.';
   end if;
 
@@ -349,7 +382,7 @@ begin
     raise exception 'Too many wrong codes. Ask them to show it again in a few minutes.';
   end if;
 
-  if current.handoff_code <> p_code then
+  if cur.handoff_code <> p_code then
     insert into public.handoff_attempts (order_id, actor_id) values (p_order_id, auth.uid());
     raise exception 'That code did not match.';
   end if;
@@ -370,10 +403,12 @@ declare
   target    uuid;
 begin
   if p_stars < 1 or p_stars > 5 then raise exception 'Stars must be 1 to 5.'; end if;
-  select o.*, r.runner_id into the_order, runner
-    from public.orders o join public.runs r on r.id = o.run_id
-   where o.id = p_order_id;
+  -- Two selects, not one. Postgres refuses to put a record variable in a
+  -- multi-item INTO list, which is what "record variable cannot be part of
+  -- multiple-item INTO list" was telling us.
+  select o.* into the_order from public.orders o where o.id = p_order_id;
   if not found then raise exception 'No such order.'; end if;
+  select r.runner_id into runner from public.runs r where r.id = the_order.run_id;
   if the_order.status <> 'delivered' then raise exception 'Not delivered yet.'; end if;
 
   if auth.uid() = the_order.orderer_id then target := runner;
@@ -386,17 +421,20 @@ begin
   on conflict (order_id, from_id) do nothing;
 
   -- Ratings are a derived number, which is why clients cannot write one.
+  -- Local to this transaction, so it cannot leak into the next statement.
+  perform set_config('foodrun.system_update', 'on', true);
   update public.profiles p
      set rating_avg = sub.avg_stars, rating_count = sub.n
     from (select round(avg(stars)::numeric, 1) as avg_stars, count(*) as n
             from public.ratings where to_id = target) sub
    where p.id = target;
+  perform set_config('foodrun.system_update', 'off', true);
 end;
 $$;
 
 /** §6.5 — report a problem. */
 create or replace function public.report_order(
-  p_order_id uuid, p_reason report_reason, p_note text default null
+  p_order_id uuid, p_reason public.report_reason, p_note text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 begin
@@ -416,20 +454,20 @@ $$;
 revoke all on function public.post_run(text, text, timestamptz, int, int) from public;
 revoke all on function public.join_run(uuid, uuid, text, text, text, uuid) from public;
 revoke all on function public.cancel_order(uuid) from public;
-revoke all on function public.runner_set_status(uuid, order_status) from public;
+revoke all on function public.runner_set_status(uuid, public.order_status) from public;
 revoke all on function public.runner_deliver(uuid, text) from public;
 revoke all on function public.rate_order(uuid, int, text) from public;
-revoke all on function public.report_order(uuid, report_reason, text) from public;
+revoke all on function public.report_order(uuid, public.report_reason, text) from public;
 revoke all on function public.settle_cancel_windows() from public;
 revoke all on function public.new_handoff_code() from public;
 
 grant execute on function public.post_run(text, text, timestamptz, int, int) to authenticated;
 grant execute on function public.join_run(uuid, uuid, text, text, text, uuid) to authenticated;
 grant execute on function public.cancel_order(uuid) to authenticated;
-grant execute on function public.runner_set_status(uuid, order_status) to authenticated;
+grant execute on function public.runner_set_status(uuid, public.order_status) to authenticated;
 grant execute on function public.runner_deliver(uuid, text) to authenticated;
 grant execute on function public.rate_order(uuid, int, text) to authenticated;
-grant execute on function public.report_order(uuid, report_reason, text) to authenticated;
+grant execute on function public.report_order(uuid, public.report_reason, text) to authenticated;
 grant execute on function public.settle_cancel_windows() to authenticated;
 
 -- =====================================================================
