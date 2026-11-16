@@ -41,7 +41,7 @@ export function requireSupabase(): SupabaseClient<Database> {
   if (!supabase) {
     throw new Error(
       'Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and ' +
-        'EXPO_PUBLIC_SUPABASE_ANON_KEY — see docs/BACKEND.md.',
+        'EXPO_PUBLIC_SUPABASE_ANON_KEY — see docs/SETUP.md.',
     );
   }
   return supabase;
