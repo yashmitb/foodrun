@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import * as auth from '@/data/auth';
 import { KEYS, loadJSON, remove, saveJSON } from '@/lib/storage';
 import { useStore } from '@/data/store';
 import type { Profile } from '@/data/types';
@@ -66,6 +67,26 @@ export function usePersistedSession(): boolean {
     (async () => {
       const saved = await loadJSON<Persisted | null>(KEYS.session, null);
       if (cancelled) return;
+
+      /**
+       * With a backend, the saved flag is only a cache: the file is on a
+       * device someone else may control, and "signedIn": true is three
+       * keystrokes to forge. Supabase's own session is the authority, so a
+       * restored session that no longer has one is dropped.
+       *
+       * It would be dropped anyway the moment it asked for data — RLS
+       * answers to a JWT, not to a local boolean — but showing someone a
+       * signed-in shell they cannot use is worse than showing them sign-in.
+       */
+      const trustworthy =
+        auth.authMode === 'supabase' ? await auth.hasLiveSession() : auth.authMode === 'demo';
+      if (cancelled) return;
+      if (!trustworthy) {
+        await remove(KEYS.session);
+        setReady(true);
+        return;
+      }
+
       if (saved?.signedIn && saved.me) {
         useStore.setState({
           signedIn: true,
